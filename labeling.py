@@ -7,6 +7,10 @@ from scipy.signal import find_peaks, peak_prominences, peak_widths
 import warnings
 warnings.filterwarnings("ignore")
 
+sensors = ['leftJointPosition', 'rightJointPosition', 'leftJointVelocity',
+           'rightJointVelocity', 'imuGyroX', 'imuGyroY', 'imuGyroZ', 'imuAccX',
+           'imuAccY', 'imuAccZ']
+
 def import_data():
     # Read data
     columns = pd.read_csv('data/columns.txt', header=None)
@@ -20,17 +24,20 @@ def import_data():
     # Format data
     data_all = [data1, data2, data3, data4, data5]
     columns_list = columns.transpose().values.tolist()[0]
-    left_joint_positions, right_joint_positions = [], []
+    data_list, left_joint_positions, right_joint_positions = [], [], []
     for data in data_all:
         # drop the 32nd column which only contains NaN values
         data.dropna(axis=1, inplace=True) 
         # rename the columns
         data.columns = columns_list
+        # only keep the 10 sensors data columns
+        data = data[sensors]
+        data_list.append(data)
         # create joing position lists
         left_joint_positions.append(data['leftJointPosition'])
         right_joint_positions.append(data['rightJointPosition'])
 
-    return data_all, left_joint_positions, right_joint_positions
+    return data_list, left_joint_positions, right_joint_positions
 
 
 def find_local_maximas(data):
