@@ -12,31 +12,14 @@ from sklearn.metrics import mean_absolute_error
 
 SEED = 42
 trials = np.arange(1, 6)
-label_columns = ['leftGaitPhaseX', 'leftGaitPhaseY', 'rightGaitPhaseX', 'rightGaitPhaseY']
-learning_rate=0.005
+label_columns = ['leftGaitPhaseX', 'leftGaitPhaseY',
+                 'rightGaitPhaseX', 'rightGaitPhaseY']
 
-# Swept Parameters
-window_sizes = np.array([40, 60, 80, 100, 120, 140])
-num_layers = np.array([1, 2, 3, 4])
-num_nodes = np.arange(5,51,5)
-opt_SGD = SGD(lr=learning_rate)
-opt_ADAM = Adam(lr=learning_rate)
-opt_RMSprop = RMSprop(lr=learning_rate)
-optimizers = [opt_SGD, opt_ADAM, opt_RMSprop]
-
-# Best Parameters
-best_window_size = [50]
-best_num_layer = [3]
-best_num_node = [15]
-best_optimizer = [opt_ADAM]
-
-
-# Helper Functions
 def load_data(trial_nums, window_size):
     """ return concatenated data from trials in tiral_nums"""
     data = pd.DataFrame()
     for trial_num in trial_nums:
-        file_name = 'features_clean/trial{}_winsize{}_clean.txt'.format(trial_num, window_size)
+        file_name = 'features/trial{}_winsize{}.txt'.format(trial_num, window_size)
         data = data.append(pd.read_csv(file_name))
     return data
 
@@ -129,7 +112,7 @@ def train_nn(window_sizes, num_layers, num_nodes, optimizers, mode='bi'):
                         else:
                             data = train_test_split_uni(test_trial_num, window_size)
                             data = data[mode]
-                        model.fit(x=data['X_train'], y=data['y_train'], epochs=200, batch_size=128, verbose=0)
+                        model.fit(x=data['X_train'], y=data['y_train'], epochs=50, batch_size=128, verbose=0)
                         loss_per_trial.append(model.evaluate(data['X_test'], data['y_test']))
                         # writes the predictions to a file in predictions file
                         file_name = f'predictions/{mode}_wsize{window_size}_{num_layer}layers_{num_node}nodes_optimizer{ix+1}_trial{test_trial_num}.txt'
@@ -154,7 +137,7 @@ def plot_err(param):
     plt.grid()
     plt.show()
 
-def plot_time_series():
+def plot_time_series(best_window_size):
     # plot the time series of predicted gait phase vs labeled gait phase using prediction files in ../predictions folder for each trial
     for test_trial_num in trials:
         file_name = f'predictions/bi_wsize40_3layers_15nodes_optimizer1_trial{test_trial_num}.txt'
@@ -185,19 +168,4 @@ def plot_time_series():
         plt.plot(gp_pred[:,1], 'red', alpha=0.8, label='predictions')
         plt.legend(loc='center left')
 
-    plt.show() 
-
-# Swept the window sizes using the univariate model for both left and right
-# Average the errors from both sides and plot against window sizes
-error_left = train_nn(window_sizes, best_num_layer, best_num_node, best_optimizer
-    , mode='left')
-error_right = train_nn(window_sizes, best_num_layer, best_num_node, best_optimizer
-    , mode='right')
-errs = pd.DataFrame(np.mean([error_left, error_right], axis=0))
-errs.to_csv('predictions/err.txt', index=False)
-plot_err(window_sizes)
-# plt.show()
-
-
-# train a bilateral model using the best params
-error = train_nn(best_window_size, best_num_layer, best_num_node, best_optimizer, mode='bi')
+    plt.show()
