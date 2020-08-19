@@ -4,6 +4,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy
 from scipy.signal import find_peaks, peak_prominences, peak_widths
+import warnings
+warnings.filterwarnings("ignore")
 
 def import_data():
     # Read data
