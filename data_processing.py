@@ -205,7 +205,7 @@ def cut_features_bulk_cnn(data_list, cutting_indices_list):
             ct = ct+1
 
 
-def extract_and_cut(data_list, labels_list, window_sizes, sensors):
+def feature_extraction(data_list, labels_list, window_sizes, sensors, cut=True):
     # Extracts the features from data based on the list of window sizes
     # Combine the labels and the features
     # Cut the standing portion of the data out
@@ -218,15 +218,15 @@ def extract_and_cut(data_list, labels_list, window_sizes, sensors):
         for sensor in sensors:
             feature_columns.append(sensor+extraction)
     
-    left_joint, right_joint = extract_joint_positions(data_list)
+    if cut: left_joint, right_joint = extract_joint_positions(data_list)
 
     for ix, data, labels in zip(range(1,6), data_list, labels_list):
         # find the list indices to cut the data
-        cutting_indices = find_cutting_indices(left_joint[ix-1], 
+        if cut: cutting_indices = find_cutting_indices(left_joint[ix-1], 
             right_joint[ix-1])
         for window_size in window_sizes:
             features = pd.DataFrame(columns=feature_columns)
-            cut_ix = cutting_indices - (window_size-1)
+            if cut: cut_ix = cutting_indices - (window_size-1)
             for i in range(window_size, data.shape[0]+1):
                 data_window = data[i-window_size:i]
                 feature = data_window.min()
@@ -241,9 +241,11 @@ def extract_and_cut(data_list, labels_list, window_sizes, sensors):
             # Combine the features with the labels
             features[labels.columns] = labels.iloc[window_size-1:].values
             # Cut features as the cut_ix
-            features_cut = cut_features(features, cut_ix)
+            if cut: featuress = cut_features(features, cut_ix)
             # Save features as files
             filename = f'features/trial{ix}_winsize{window_size}.txt'
-            features_cut.to_csv(filename, index=False)
+            if cut:
+                filename = f'features/cut_trial{ix}_winsize{window_size}.txt'
+            features.to_csv(filename, index=False)
 
 
