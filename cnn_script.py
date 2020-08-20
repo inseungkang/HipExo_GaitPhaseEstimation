@@ -1,4 +1,5 @@
 from data_processing import *
+from convolutional_nn import *
 
 sensors = ['leftJointPosition', 'rightJointPosition', 'leftJointVelocity',
            'rightJointVelocity', 'imuGyroX', 'imuGyroY', 'imuGyroZ', 'imuAccX',
@@ -29,3 +30,8 @@ for i in range(5):
 
 # Cut the standing data and store files into ../features folder
 cut_features_bulk_cnn(data, cut_indicies_list)
+
+###################### Training Neural Network ##################
+
+
+
