@@ -192,6 +192,19 @@ def cut_features(features, cutting_indices):
     return features_cut
 
 
+def cut_features_bulk_cnn(data_list, cutting_indices_list):
+    # take a list of data and a list of cutting_indices
+    # cut the data off at the standing section
+    # Store the files into the ../features folder
+    ct = 1
+    for data, cutting_indices in zip(data_list, cutting_indices_list):
+        for i in range(math.floor((len(cutting_indices)/2))):
+            features = data.iloc[cutting_indices[i*2]:cutting_indices[(i*2)+1]+1]
+            filename = f'features/cnn_feature{ct}.txt'
+            features.to_csv(filename, index=False)
+            ct = ct+1
+
+
 def extract_and_cut(data_list, labels_list, window_sizes, sensors):
     # Extracts the features from data based on the list of window sizes
     # Combine the labels and the features
