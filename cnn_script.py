@@ -29,7 +29,8 @@ for i in range(5):
     right_joint_positions[i]))
 
 # Cut the standing data and store files into ../features folder
-cut_features_bulk_cnn(data, cut_indicies_list)
+data_list = cnn_cut_data(data, cut_indicies_list)
+cnn_extract_images(data_list, [40])
 
 ###################### Training Neural Network ##################
 

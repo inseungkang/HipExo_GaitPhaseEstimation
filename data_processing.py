@@ -192,19 +192,6 @@ def cut_features(features, cutting_indices):
     return features_cut
 
 
-def cut_features_bulk_cnn(data_list, cutting_indices_list):
-    # take a list of data and a list of cutting_indices
-    # cut the data off at the standing section
-    # Store the files into the ../features folder
-    ct = 1
-    for data, cutting_indices in zip(data_list, cutting_indices_list):
-        for i in range(math.floor((len(cutting_indices)/2))):
-            features = data.iloc[cutting_indices[i*2]:cutting_indices[(i*2)+1]+1]
-            filename = f'features/cnn_feature{ct}.txt'
-            features.to_csv(filename, index=False)
-            ct = ct+1
-
-
 def feature_extraction(data_list, labels_list, window_sizes, sensors, cut=True):
     # Extracts the features from data based on the list of window sizes
     # Combine the labels and the features
@@ -248,4 +235,25 @@ def feature_extraction(data_list, labels_list, window_sizes, sensors, cut=True):
                 filename = f'features/cut_trial{ix}_winsize{window_size}.txt'
             features.to_csv(filename, index=False)
 
+############## functions specificly for CNN ###################
 
+def cnn_cut_data(data_list, cutting_indices_list):
+    # take a list of data and a list of cutting_indices
+    # cut the data off at the standing section
+    features_list = []
+    for data, cutting_indices in zip(data_list, cutting_indices_list):
+        for i in range(math.floor((len(cutting_indices)/2))):
+            features = data.iloc[cutting_indices[i*2]:cutting_indices[(i*2)+1]+1]
+            features_list.append(features)
+    return features_list
+
+def cnn_extract_images(data_list, window_sizes):
+    # Store 10 3D arrays as .npy fiels
+    for ix, data in enumerate(data_list):
+        for window_size in window_sizes:
+            image_list = np.empty([window_size, data.shape[1]])
+            for i in range(window_size, data.shape[0]+1):
+                image = data[i-window_size:i].to_numpy()
+                image_list = np.dstack((image_list, image))
+            filename = f'features/cnn_data{ix+1}'
+            np.save(filename, image_list)
