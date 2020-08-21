@@ -25,14 +25,22 @@ def load_data(trial_nums, window_size):
 
 
 def create_model(out_dim, num_layer, num_node):
+    # create a linera regression model
     model = Sequential()
     for x in range(num_layer):
         model.add(Dense(num_node, activation="relu"))
     model.add(Dense(out_dim))
     return model
 
+def create_model_class(num_layer, num_node):
+    # create a classification model
+    model = Sequential()
+    for x in range(num_layer):
+        model.add(Dense(num_node, activation="relu"))
+    model.add(Dense(1, activation="sigmoid"))
+    return model
 
-def train_test_split(test_trial_num, window_size):
+def train_test_split(test_trial_num, window_size, label_columns):
     # Leave the test trial and put the other 4 in a training set
     # Splits the features and the label for both training set and test set
     train_trials = np.delete(trials, test_trial_num-1)
@@ -91,39 +99,59 @@ def preprocess_data(X_train, X_test):
 
 
 def train_nn(window_sizes, num_layers, num_nodes, optimizers, mode='bi'):
-    # All parameters except for mode should be in an array/list format
-    # mode should be one of following: ['bi', 'left', 'right']
-    # Returns an array of errors for each parameter
-    # Stores the predictions for each parameter and each trial, as well as an error file to the ../predictions folder
+    '''
+    All parameters except for mode should be in an array/list format
+    mode should be one of following: ['bi', 'left', 'right', 'classification']
+    Returns an array of errors for each parameter
+    Stores the predictions for each parameter and each trial, as well as an
+    error file to the ../predictions folder
+    '''
     errors = []
     for window_size in window_sizes:
         for num_layer in num_layers:
             for num_node in num_nodes:
                 if mode == 'bi':
                     model = create_model(4, num_layer, num_node)
+                if mode == 'classification':
+                    model = create_model_class(num_layer, num_node)
                 else:
                     model = create_model(2, num_layer, num_node)
                 for ix, optimizer in enumerate(optimizers):
-                    model.compile(loss='mae', optimizer=optimizer)
+                    if mode == 'classification':
+                        model.compile(
+                            loss='binary_crossentropy', optimizer=optimizer, metrics=[keras.metrics.BinaryAccuracy()])
+                    else:
+                        model.compile(loss='mae', optimizer=optimizer)
                     loss_per_trial = []
                     for test_trial_num in trials:
                         if mode == 'bi':
-                            data = train_test_split(test_trial_num, window_size)
+                            data = train_test_split(test_trial_num, window_size, label_columns)
+                        elif mode == 'classification':
+                            data = train_test_split(
+                                test_trial_num, window_size, ['y'])
                         else:
                             data = train_test_split_uni(test_trial_num, window_size)
                             data = data[mode]
-                        model.fit(x=data['X_train'], y=data['y_train'], epochs=50, batch_size=128, verbose=0)
-                        loss_per_trial.append(model.evaluate(data['X_test'], data['y_test']))
+                        model.fit(x=data['X_train'], y=data['y_train'], epochs=5, batch_size=128, verbose=2)
+                        if mode == 'classification': 
+                            _, accuracy = model.evaluate(data['X_test'], data['y_test'])
+                            loss_per_trial.append(accuracy)
+                            y_preds = pd.DataFrame(
+                                model.predict_classes(data['X_test']))
+                        else:
+                            loss_per_trial.append(model.evaluate(data['X_test'], data['y_test']))
+                            y_preds = pd.DataFrame(
+                                model.predict(data['X_test']))
                         # writes the predictions to a file in predictions file
                         file_name = f'predictions/{mode}_wsize{window_size}_{num_layer}layers_{num_node}nodes_optimizer{ix+1}_trial{test_trial_num}.txt'
-                        y_preds = pd.DataFrame(model.predict(data['X_test']))
                         y_preds.to_csv(file_name, index=False)
                     loss_mean = np.mean(loss_per_trial) * 100
                     errors.append(loss_mean)
-                    print('Mode: {}\nWindow Size: {} | {} Hidden Layers | {} nodes\nOptimizer: {}\nMean MAE: {:.2f}%'.format(mode, window_size, num_layer, num_node, ix+1, loss_mean))
+                    print('Mode: {}\nWindow Size: {} | {} Hidden Layers | {} nodes\nOptimizer: {}\nAccuracy: {:.2f}%'.format(mode, window_size, num_layer, num_node, ix+1, loss_mean))
     errors_df = pd.DataFrame(errors)
     errors_df.to_csv('predictions/err.txt', index=False)
     return np.array(errors)
+
 
 def plot_err(param):
     # Plot err against the parameter
