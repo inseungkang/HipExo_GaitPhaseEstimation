@@ -238,8 +238,16 @@ def feature_extraction(data_list, labels_list, window_sizes, sensors, cut=True):
 ############## functions specificly for CNN ###################
 
 def cnn_cut_data(data_list, cutting_indices_list):
-    # take a list of data and a list of cutting_indices
-    # cut the data off at the standing section
+    '''
+    Params:
+        data_lsit: list of DataFrames
+        cutting_indicces_list: list of integers representing the start and end
+        of each new data object in the format of [start, end, ... start, end]
+    Return:
+        list of DataFrames containing data objects
+    Split each data in data_list into multiple DatFrames based on the
+    cutting_indices_list.
+    '''
     features_list = []
     for data, cutting_indices in zip(data_list, cutting_indices_list):
         for i in range(math.floor((len(cutting_indices)/2))):
@@ -248,12 +256,33 @@ def cnn_cut_data(data_list, cutting_indices_list):
     return features_list
 
 def cnn_extract_images(data_list, window_sizes):
-    # Store 10 3D arrays as .npy fiels
+    '''
+    Params:
+        data_list: list of DataFrames
+        window_sizes: list of integers
+    Writes a features file and a labels files to ../features for each 
+    combination of data and window size
+    '''
     for ix, data in enumerate(data_list):
+        # split features(X) and labels(y)
+        data = data.to_numpy()
+        label_columns = np.arange(10, 14)
+        X = np.delete(data, label_columns, axis=1)
+        y = data[:, label_columns]
+
         for window_size in window_sizes:
-            image_list = np.empty([window_size, data.shape[1]])
-            for i in range(window_size, data.shape[0]+1):
-                image = data[i-window_size:i].to_numpy()
-                image_list = np.dstack((image_list, image))
-            filename = f'features/cnn_data{ix+1}'
-            np.save(filename, image_list)
+            filename = f'features/cnn_trial{ix+1}_winsize{window_size}'
+            # Store labels(y) as .npy files
+            # y.shape = (m, 4)
+            label_arr = y[window_size-1:, :]
+            np.save(filename+'_y',label_arr)
+
+            # Extract images from X and store as .npy files
+            # X.shape = (m, win_size, 10, 1)
+            image_arr = None
+            for i in range(window_size, X.shape[0]+1):
+                image = X[i-window_size:i]
+                if image_arr is None: image_arr = image
+                else: image_arr = np.dstack((image_arr, image))
+            image_arr = np.transpose(image_arr, (2, 0, 1))[..., np.newaxis]
+            np.save(filename+'_X', image_arr)

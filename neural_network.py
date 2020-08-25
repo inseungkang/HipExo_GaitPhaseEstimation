@@ -19,7 +19,7 @@ def load_data(trial_nums, window_size):
     """ return concatenated data from trials in tiral_nums"""
     data = pd.DataFrame()
     for trial_num in trial_nums:
-        file_name = 'features/trial{}_winsize{}.txt'.format(trial_num, window_size)
+        file_name = f'features/trial{trial_num}_winsize{window_size}.txt'
         data = data.append(pd.read_csv(file_name))
     return data
 
