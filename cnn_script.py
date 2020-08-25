@@ -1,5 +1,6 @@
 from data_processing import *
 from convolutional_nn import *
+from keras.optimizers import Adam
 
 sensors = ['leftJointPosition', 'rightJointPosition', 'leftJointVelocity',
            'rightJointVelocity', 'imuGyroX', 'imuGyroY', 'imuGyroZ', 'imuAccX',
@@ -29,9 +30,9 @@ for i in range(5):
     right_joint_positions[i]))
 
 # Cut the standing data and store files into ../features folder
-cut_features_bulk_cnn(data, cut_indicies_list)
+# data_list = cnn_cut_data(data, cut_indicies_list)
+# cnn_extract_images(data_list, [20, 40, 60, 80, 100, 120])
 
 ###################### Training Neural Network ##################
-
-
+train_cnn([20, 40, 60, 80, 100, 120], [2], [2], [Adam()])
 
