@@ -59,15 +59,14 @@ def train_cnn(window_sizes, num_layers, num_nodes, optimizers):
     Stores the predictions for each parameter and each trial, as well as an
     error file to the ../predictions folder
     '''
-    errors = []
+    errors = np.array([])
     for window_size in window_sizes:
         for num_layer in num_layers:
             for num_node in num_nodes:
                 model = cnn_create_model(window_size)
                 for ix, optimizer in enumerate(optimizers):
                     model.compile(loss='mse', optimizer=optimizer)
-                    loss_per_trial = []
-                    accuracy = []
+                    loss_per_trial = np.array([])
                     for test_trial_num in trials:
                         data = cnn_train_test_split(test_trial_num, window_size)
                         
@@ -100,51 +99,42 @@ def train_cnn(window_sizes, num_layers, num_nodes, optimizers):
                     for test_trial_num in trials:
                         data = cnn_train_test_split(test_trial_num, window_size)
                         y_preds = model.predict(data['X_test'])
-                        loss_per_trial = np.mean(custom_rmse(data['y_test'], y_preds))
+                        loss_per_trial = np.append(loss_per_trial, np.mean(custom_rmse(data['y_test'], y_preds)))
                     loss_mean = np.mean(loss_per_trial)
-                    errors.append(loss_mean)
+                    errors = np.append(errors, loss_mean)
                     print('Window Size: {} \nRSME: {:.2f}%'.format(
                         window_size, loss_mean))
                 # model.save('test_model_save_2')
-#     errs = errors.to_numpy()
-#     np.save('predictions/err.txt', errs)
-#     return errs
-    return
+    np.savetxt('err.txt', errors)
 
 def custom_rmse(y_true, y_pred):
     #Raw values and Prediction are in X,Y
+    labels, theta, gp = {}, {}, {}
 
     #Separate legs
-    left_true = y_true[:, :2]
-    right_true = y_true[:, 2:]
-    left_pred = y_pred[:, :2]
-    right_pred = y_pred[:, 2:]
+    labels['left_true'] = y_true[:, :2]
+    labels['right_true'] = y_true[:, 2:]
+    labels['left_pred'] = y_pred[:, :2]
+    labels['right_pred'] = y_pred[:, 2:]
 
-    #Convert to polar
-    left_true_theta = np.arctan2(left_true[:, 1], left_true[:, 0])
-    right_true_theta = np.arctan2(right_true[:, 1], right_true[:, 0])
-    left_pred_theta = np.arctan2(left_pred[:, 1], left_pred[:, 0])
-    right_pred_theta = np.arctan2(right_pred[:, 1], right_pred[:, 0])
+    for key, value in labels.items(): 
+        #Convert to polar
+        theta[key] = np.arctan2(value[:, 1], value[:, 0])
+        
+        #Bring into range of 0 to 2pi
+        theta[key] = np.mod(theta[key] + 2*np.pi, 2*np.pi)
 
-    #Bring into range of 0 to 2pi
-    left_true_theta = np.mod(left_true_theta + 2*np.pi, 2*np.pi)
-    right_true_theta = np.mod(right_true_theta + 2*np.pi, 2*np.pi)
-    left_pred_theta = np.mod(left_pred_theta + 2*np.pi, 2*np.pi)
-    right_pred_theta = np.mod(right_pred_theta + 2*np.pi, 2*np.pi)
-
-    #Interpolate from 0 to 100%
-    left_gp_true = 100*left_true_theta / (2*np.pi)
-    right_gp_true = 100*right_true_theta / (2*np.pi)
-    left_gp_pred = 100*left_pred_theta / (2*np.pi)
-    right_gp_pred = 100*right_pred_theta / (2*np.pi)
-
+        #Interpolate from 0 to 100%
+        gp[key] = 100*theta[key] / (2*np.pi)
+    
     #Diff
-    left_diff = np.subtract(left_gp_true, left_gp_pred)
-    right_diff = np.subtract(right_gp_true, right_gp_pred)
+    left_diff = np.subtract(gp['left_true'], gp['left_pred'])
+    right_diff = np.subtract(gp['right_true'], gp['right_pred'])
     left_rmse = np.sqrt(np.mean(np.square(left_diff)))
     right_rmse = np.sqrt(np.mean(np.square(right_diff)))
 
     return left_rmse, right_rmse
+
 
 def plot_err(param):
     # Plot err against the parameter
@@ -152,7 +142,7 @@ def plot_err(param):
     plt.plot(param, error)
     plt.xticks(param)
     plt.xlabel('window size (ms)')
-    plt.ylabel('mean absolute error')
+    plt.ylabel('rmse (%)')
 
     # zip joins x and y coordinates in pairs
     for x, y in zip(param, accuracy):
