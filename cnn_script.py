@@ -30,9 +30,11 @@ for i in range(5):
     right_joint_positions[i]))
 
 # Cut the standing data and store files into ../features folder
-# data_list = cnn_cut_data(data, cut_indicies_list)
+data_list = cnn_cut_data(data, cut_indicies_list)
 # cnn_extract_images(data_list, [20, 40, 60, 80, 100, 120])
+cnn_extract_images(data_list, [20])
 
 ###################### Training Neural Network ##################
-train_cnn([20, 40, 60, 80, 100, 120], [2], [2], [Adam()])
+# train_cnn([20, 40, 60, 80, 100, 120], [2], [2], [Adam()])
+train_cnn([20], [2], [2], [Adam()])
 

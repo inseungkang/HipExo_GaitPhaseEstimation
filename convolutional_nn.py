@@ -59,7 +59,7 @@ def train_cnn(window_sizes, num_layers, num_nodes, optimizers):
                     for test_trial_num in trials:
                         data = cnn_train_test_split(test_trial_num, window_size)
                         model.fit(x=data['X_train'], y=data['y_train'],
-                                  epochs=10, batch_size=128, verbose=0)
+                                  epochs=1, batch_size=128, verbose=0)
                         loss_per_trial.append(model.evaluate(
                                 data['X_test'], data['y_test']))
                         y_preds = model.predict(data['X_test'])
@@ -70,9 +70,11 @@ def train_cnn(window_sizes, num_layers, num_nodes, optimizers):
                     errors.append(loss_mean)
                     print('Window Size: {} \nAccuracy: {:.2f}%'.format(
                         window_size, loss_mean))
-    errs = errors.to_numpy()
-    np.save('predictions/err.txt', errs)
-    return errs
+                model.save('test_model_save')
+#     errs = errors.to_numpy()
+#     np.save('predictions/err.txt', errs)
+#     return errs
+    return
     
 
 
