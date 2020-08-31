@@ -42,10 +42,10 @@ def preprocess_data(X_train, X_test):
 def cnn_create_model(winsize):
     # create model
     model = Sequential()
-    
+    kersize = 20
     # add model layers
-    model.add(Conv1D(filters=10, input_shape=(winsize, 10), kernel_size=20))
-    model.add(Conv1D(filters=10, kernel_size=5, activation="relu"))
+    model.add(Conv1D(filters=10, input_shape=(winsize, 10), kernel_size=kersize))
+    model.add(Conv1D(filters=10, kernel_size=winsize-kersize+1, activation="relu"))
     model.add(Flatten())
     model.add(Dense(4, activation="tanh"))
     return model
@@ -63,41 +63,61 @@ def train_cnn(window_sizes, num_layers, num_nodes, optimizers):
             for num_node in num_nodes:
                 model = cnn_create_model(window_size)
                 for ix, optimizer in enumerate(optimizers):
-                    model.compile(loss='mae', optimizer=optimizer)
+                    model.compile(loss='mse', optimizer=optimizer)
                     loss_per_trial = []
                     accuracy = []
                     for test_trial_num in trials:
                         data = cnn_train_test_split(test_trial_num, window_size)
                         model.fit(x=data['X_train'], y=data['y_train'],
                                   epochs=1, batch_size=128, verbose=0)
-#                         loss_per_trial.append(model.evaluate(
-#                                 data['X_test'], data['y_test']))
-#                         y_preds = model.predict(data['X_test'])
-                        # writes the predictions to a file in predictions file
-                        # file_name = f'predictions/wsize{window_size}_trial{test_trial_num}.txt'
-                        # y_preds.to_csv(file_name, index=False)
                     for test_trial_num in trials:
                         data = cnn_train_test_split(test_trial_num, window_size)
-                        loss_per_trial.append(model.evaluate(
-                                data['X_test'], data['y_test']))
                         y_preds = model.predict(data['X_test'])
-                    loss_mean = np.mean(loss_per_trial) * 100
+                        loss_per_trial = np.mean(custom_rmse(data['y_test'], y_preds))
+                    loss_mean = np.mean(loss_per_trial)
                     errors.append(loss_mean)
-                    print('Window Size: {} \nMAE: {:.2f}'.format(
+                    print('Window Size: {} \nRSME: {:.2f}'.format(
                         window_size, loss_mean))
-                model.save('test_model_save')
+                # model.save('test_model_save_2')
 #     errs = errors.to_numpy()
 #     np.save('predictions/err.txt', errs)
 #     return errs
     return
-    
 
-def plot_learning_curve(history):
-    plt.plot(history.history['loss'])
-    plt.title('model loss')
-    plt.ylabel('loss')
-    plt.xlabel('epoch')
-    plt.show()
+def custom_rmse(y_true, y_pred):
+    #Raw values and Prediction are in X,Y
+
+    #Separate legs
+    left_true = y_true[:, :2]
+    right_true = y_true[:, 2:]
+    left_pred = y_pred[:, :2]
+    right_pred = y_pred[:, 2:]
+
+    #Convert to polar
+    left_true_theta = np.arctan2(left_true[:, 1], left_true[:, 0])
+    right_true_theta = np.arctan2(right_true[:, 1], right_true[:, 0])
+    left_pred_theta = np.arctan2(left_pred[:, 1], left_pred[:, 0])
+    right_pred_theta = np.arctan2(right_pred[:, 1], right_pred[:, 0])
+
+    #Bring into range of 0 to 2pi
+    left_true_theta = np.mod(left_true_theta + 2*np.pi, 2*np.pi)
+    right_true_theta = np.mod(right_true_theta + 2*np.pi, 2*np.pi)
+    left_pred_theta = np.mod(left_pred_theta + 2*np.pi, 2*np.pi)
+    right_pred_theta = np.mod(right_pred_theta + 2*np.pi, 2*np.pi)
+
+    #Interpolate from 0 to 100%
+    left_gp_true = 100*left_true_theta / (2*np.pi)
+    right_gp_true = 100*right_true_theta / (2*np.pi)
+    left_gp_pred = 100*left_pred_theta / (2*np.pi)
+    right_gp_pred = 100*right_pred_theta / (2*np.pi)
+
+    #Diff
+    left_diff = np.subtract(left_gp_true, left_gp_pred)
+    right_diff = np.subtract(right_gp_true, right_gp_pred)
+    left_rmse = np.sqrt(np.mean(np.square(left_diff)))
+    right_rmse = np.sqrt(np.mean(np.square(right_diff)))
+
+    return left_rmse, right_rmse
 
 def plot_err(param):
     # Plot err against the parameter
