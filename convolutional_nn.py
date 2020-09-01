@@ -44,9 +44,10 @@ def cnn_create_model(winsize):
     # create model
     model = Sequential()
     kersize = 20
+    kersize2 = int(winsize - kersize + 1)
     # add model layers
     model.add(Conv1D(filters=10, input_shape=(winsize, 10), kernel_size=kersize))
-    model.add(Conv1D(filters=10, kernel_size=winsize-kersize+1))
+    model.add(Conv1D(filters=10, kernel_size=kersize2))
     model.add(Activation('relu'))
     model.add(Flatten())
     model.add(Dense(4, activation="tanh"))
@@ -89,10 +90,9 @@ def train_cnn(window_sizes, num_layers, num_nodes, optimizers):
                         model.fit(
                             data['X_train'], 
                             data['y_train'], 
-                            epochs=1, 
+                            epochs=100, 
                             batch_size=128, 
-                            verbose=0, 
-                            validation_split=0.2,
+                            verbose=0,
                             shuffle=True, 
                             callbacks=[model_checkpoint_callback, early_stopping_callback])
                             
@@ -102,7 +102,7 @@ def train_cnn(window_sizes, num_layers, num_nodes, optimizers):
                         loss_per_trial = np.append(loss_per_trial, np.mean(custom_rmse(data['y_test'], y_preds)))
                     loss_mean = np.mean(loss_per_trial)
                     errors = np.append(errors, loss_mean)
-                    print('Window Size: {} \nRSME: {:.2f}%'.format(
+                    print('Window Size: {} | RMSE: {:.2f}%'.format(
                         window_size, loss_mean))
                 # model.save('test_model_save_2')
     np.savetxt('err.txt', errors)
@@ -138,14 +138,14 @@ def custom_rmse(y_true, y_pred):
 
 def plot_err(param):
     # Plot err against the parameter
-    errors = np.loadtxt('predictions/err')
-    plt.plot(param, error)
+    errors = np.loadtxt('err.txt')
+    plt.plot(param, errors)
     plt.xticks(param)
     plt.xlabel('window size (ms)')
     plt.ylabel('rmse (%)')
 
     # zip joins x and y coordinates in pairs
-    for x, y in zip(param, accuracy):
+    for x, y in zip(param, errors):
 
         label = "{:.2f}".format(y)
 
@@ -157,3 +157,10 @@ def plot_err(param):
     plt.title('Convolutional Neural Network')
     plt.grid()
     plt.show()
+
+def plot_gait_phase(y_true, y_pred):
+    plt.figure()
+    plt.plot(y_true)
+    plt.plot(y_pred)
+    plt.title('CNN Gait Phase')
+    plt.ylabel('Gait Phase (%)')
