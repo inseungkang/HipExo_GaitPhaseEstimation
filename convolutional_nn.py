@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from keras.backend import clear_session
 from keras.models import Sequential
 from keras.layers import Dense, Conv1D, Flatten, Activation
 from keras.callbacks import ModelCheckpoint, EarlyStopping
@@ -44,13 +45,14 @@ def cnn_create_model(winsize):
     # create model
     model = Sequential()
     kersize = 20
-    kersize2 = int(winsize - kersize + 1)
+    kersize2 = int(0.5*winsize - kersize + 1)
     # add model layers
     model.add(Conv1D(filters=10, input_shape=(winsize, 10), kernel_size=kersize))
-    model.add(Conv1D(filters=10, kernel_size=kersize2))
+    model.add(Conv1D(filters=10, kernel_size=10))
     model.add(Activation('relu'))
     model.add(Flatten())
     model.add(Dense(4, activation="tanh"))
+    model.summary()
     return model
 
 def train_cnn(window_sizes, num_layers, num_nodes, optimizers):
@@ -64,42 +66,33 @@ def train_cnn(window_sizes, num_layers, num_nodes, optimizers):
     for window_size in window_sizes:
         for num_layer in num_layers:
             for num_node in num_nodes:
-                model = cnn_create_model(window_size)
                 for ix, optimizer in enumerate(optimizers):
-                    model.compile(loss='mse', optimizer=optimizer)
                     loss_per_trial = np.array([])
                     for test_trial_num in trials:
+                        model = cnn_create_model(window_size)
                         data = cnn_train_test_split(test_trial_num, window_size)
-                        
+                        model.compile(loss='mse', optimizer=optimizer)
                         # early stopping
-                        checkpoint_filepath = '/tmp/checkpoint'
-                        model_checkpoint_callback = ModelCheckpoint(
-                            checkpoint_filepath, 
-                            monitor='val_loss', 
-                            verbose=0, 
-                            save_best_only=True, 
-                            save_weights_only=False, 
-                            mode='auto', 
-                            period=1)
                         early_stopping_callback = EarlyStopping(
                             monitor='val_loss', 
                             min_delta=0, 
-                            patience=10, 
+                            patience=5, 
                             verbose=0)
 
                         model.fit(
                             data['X_train'], 
                             data['y_train'], 
-                            epochs=100, 
+                            epochs=3, 
                             batch_size=128, 
-                            verbose=0,
+                            verbose=1,
                             shuffle=True, 
-                            callbacks=[model_checkpoint_callback, early_stopping_callback])
+                            validation_split=0.15,
+                            callbacks=[early_stopping_callback])
                             
-                    for test_trial_num in trials:
-                        data = cnn_train_test_split(test_trial_num, window_size)
                         y_preds = model.predict(data['X_test'])
                         loss_per_trial = np.append(loss_per_trial, np.mean(custom_rmse(data['y_test'], y_preds)))
+                        clear_session()
+                    print(f'Loss in each trial: {loss_per_trial}')
                     loss_mean = np.mean(loss_per_trial)
                     errors = np.append(errors, loss_mean)
                     print('Window Size: {} | RMSE: {:.2f}%'.format(
