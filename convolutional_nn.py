@@ -59,20 +59,27 @@ def train_cnn(window_sizes, num_layers, num_nodes, optimizers):
                     for test_trial_num in trials:
                         data = cnn_train_test_split(test_trial_num, window_size)
                         model.fit(x=data['X_train'], y=data['y_train'],
-                                  epochs=10, batch_size=128, verbose=0)
-                        loss_per_trial.append(model.evaluate(
-                                data['X_test'], data['y_test']))
-                        y_preds = model.predict(data['X_test'])
+                                  epochs=1, batch_size=128, verbose=0)
+#                         loss_per_trial.append(model.evaluate(
+#                                 data['X_test'], data['y_test']))
+#                         y_preds = model.predict(data['X_test'])
                         # writes the predictions to a file in predictions file
                         # file_name = f'predictions/{mode}_wsize{window_size}_{num_layer}layers_{num_node}nodes_optimizer{ix+1}_trial{test_trial_num}.txt'
                         # y_preds.to_csv(file_name, index=False)
+                    for test_trial_num in trials:
+                        data = cnn_train_test_split(test_trial_num, window_size)
+                        loss_per_trial.append(model.evaluate(
+                                data['X_test'], data['y_test']))
+                        y_preds = model.predict(data['X_test'])
                     loss_mean = np.mean(loss_per_trial) * 100
                     errors.append(loss_mean)
                     print('Window Size: {} \nAccuracy: {:.2f}%'.format(
                         window_size, loss_mean))
-    errs = errors.to_numpy()
-    np.save('predictions/err.txt', errs)
-    return errs
+                model.save('test_model_save')
+#     errs = errors.to_numpy()
+#     np.save('predictions/err.txt', errs)
+#     return errs
+    return
     
 
 
