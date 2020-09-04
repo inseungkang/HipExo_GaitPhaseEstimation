@@ -97,7 +97,7 @@ def train_cnn(window_sizes, num_layers, num_nodes, optimizers):
                     errors = np.append(errors, loss_mean)
                     print('Window Size: {} | RMSE: {:.2f}%'.format(
                         window_size, loss_mean))
-                # model.save('test_model_save_2')
+                model.save('test_model_save_2')
     np.savetxt('err.txt', errors)
 
 def custom_rmse(y_true, y_pred):

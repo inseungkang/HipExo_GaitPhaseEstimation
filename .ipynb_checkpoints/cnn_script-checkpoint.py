@@ -32,9 +32,9 @@ for i in range(5):
 # Cut the standing data and store files into ../features folder
 data_list = cnn_cut_data(data, cut_indicies_list)
 # cnn_extract_images(data_list, [20, 40, 60, 80, 100, 120])
-cnn_extract_images(data_list, [20])
+cnn_extract_images(data_list, [40])
 
 ###################### Training Neural Network ##################
 # train_cnn([20, 40, 60, 80, 100, 120], [2], [2], [Adam()])
-train_cnn([20], [2], [2], [Adam()])
+train_cnn([40], [2], [2], [Adam()])
 
