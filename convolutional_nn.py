@@ -103,43 +103,49 @@ def train_cnn(window_sizes, num_layers, num_nodes, optimizers):
                 model.save('test_model_save_2')
     np.savetxt('err.txt', errors)
 
-def train_rnn():
-#     save_model_string = "../Model Checkpoints/" + testing_subject + "LSTM_independent_best_model.hdf5"
-    data = cnn_train_test_split(2, 40)
-    print(data['X_train'].shape)
-    print(data['y_train'].shape)
-#     model_checkpoint_callback = ModelCheckpoint(save_model_string, monitor='val_loss', verbose=0, save_best_only=True, save_weights_only=True, mode='auto', period=1)
-    early_stopping_callback = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=0)
-    model = Sequential()
-    model.add(LSTM(30, input_shape=(data['X_train'].shape[1], data['X_train'].shape[-1]), return_sequences = False, activation='relu'))
-    model.add(Flatten())
-    model.add(Dense(4, activation='tanh'))
-    # model = multi_gpu_model(model, gpus=2)
-    model.compile(loss='mean_squared_error', optimizer='rmsprop')
-    model.summary()
-    model.fit(data['X_train'], data['y_train'], epochs=5, batch_size=128, verbose=0, validation_split=0.2, shuffle=True, callbacks= [early_stopping_callback])
-    model.save('test_rnn_model')
-    results = model.evaluate(data['X_test'], data['y_test'])
-        
-    predictions = model.predict(data['X_test'])
-    _,_, gp = custom_rmse(data['y_test'], predictions)
-    
-    plt.figure(1)
-    plt.plot(gp['left_true'])
-    plt.plot(gp['left_pred'])
-    plt.legend(['GT', 'Pred'])
-    plt.show()
-    return model
-    
 def custom_rmse(y_true, y_pred):
     #Raw values and Prediction are in X,Y
     labels, theta, gp = {}, {}, {}
 
     #Separate legs
-    labels['left_true'] = y_true[:, :2]
-    labels['right_true'] = y_true[:, 2:]
-    labels['left_pred'] = y_pred[:, :2]
-    labels['right_pred'] = y_pred[:, 2:]
+    left_true = y_true[:, :2]
+    right_true = y_true[:, 2:]
+    left_pred = y_pred[:, :2]
+    right_pred = y_pred[:, 2:]
+    
+    #Calculate cosine distance
+    left_num = np.sum(np.multiply(left_true, left_pred), axis=1)
+    left_denom = np.linalg.norm(left_true, axis=1) * np.linalg.norm(left_pred, axis=1)
+    right_num = np.sum(np.multiply(right_true, right_pred), axis=1)
+    right_denom = np.linalg.norm(right_true, axis=1) * np.linalg.norm(right_pred, axis=1)
+
+    left_cos = left_num / left_denom
+    right_cos = right_num / right_denom
+    
+    #Clip large values and small values
+    left_cos = np.minimum(left_cos, np.zeros(left_cos.shape)+1)
+    left_cos = np.maximum(left_cos, np.zeros(left_cos.shape)-1)
+    
+    right_cos = np.minimum(right_cos, np.zeros(right_cos.shape)+1)
+    right_cos = np.maximum(right_cos, np.zeros(right_cos.shape)-1)
+    
+    #Get theta error
+    left_theta = np.arccos(left_cos)
+    right_theta = np.arccos(right_cos)
+    
+    #Get gait phase error
+    left_gp_error = left_theta * 100 / (2*np.pi)
+    right_gp_error = right_theta * 100 / (2*np.pi)
+    
+    #Get rmse
+    left_rmse = np.sqrt(np.mean(np.square(left_gp_error)))
+    right_rmse = np.sqrt(np.mean(np.square(right_gp_error)))
+
+    #Separate legs
+    labels['left_true'] = left_true
+    labels['right_true'] = right_true
+    labels['left_pred'] = left_pred
+    labels['right_pred'] = right_pred
 
     for key, value in labels.items(): 
         #Convert to polar
@@ -150,14 +156,10 @@ def custom_rmse(y_true, y_pred):
 
         #Interpolate from 0 to 100%
         gp[key] = 100*theta[key] / (2*np.pi)
-    
-    #Diff
-    left_diff = np.subtract(gp['left_true'], gp['left_pred'])
-    right_diff = np.subtract(gp['right_true'], gp['right_pred'])
-    left_rmse = np.sqrt(np.mean(np.square(left_diff)))
-    right_rmse = np.sqrt(np.mean(np.square(right_diff)))
 
     return left_rmse, right_rmse, gp
+
+
 
 
 def plot_err(param):
