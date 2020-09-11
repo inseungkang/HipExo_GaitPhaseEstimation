@@ -36,5 +36,5 @@ from tensorflow.keras.optimizers import Adam
 
 ###################### Training Neural Network ##################
 # train_cnn([20, 40, 60, 80, 100, 120], [2], [2], [Adam()])
-train_cnn([40], [2], [2], [Adam()])
+train_cnn(data_list, [40], [Adam()])
 # train_rnn()

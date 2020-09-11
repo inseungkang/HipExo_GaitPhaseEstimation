@@ -4,8 +4,10 @@ from tensorflow.keras.backend import clear_session
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Conv1D, Flatten, Activation, LSTM
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, TensorBoard
+from keras.metrics import RootMeanSquaredError
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
+from data_processing import cnn_extract_features
 
 trials = np.arange(1, 11)
 
@@ -14,7 +16,7 @@ def cnn_load_data(trial_nums, window_size):
     for trial_num in trial_nums:
         filename_X = f'features/cnn_trial{trial_num}_winsize{window_size}_X.npy'
         filename_y = f'features/cnn_trial{trial_num}_winsize{window_size}_y.npy'
-        X.append(np.load(filename_X).squeeze())
+        X.append(np.load(filename_X))
         y.append(np.load(filename_y))
     X = np.concatenate(X, axis=0)
     y = np.concatenate(y, axis=0)
@@ -43,19 +45,17 @@ def preprocess_data(X_train, X_test):
 
 def cnn_create_model(winsize):
     # create model
-    model = Sequential()
-    kersize = 20
-    kersize2 = int(0.5*winsize - kersize + 1)
-    # add model layers
-    model.add(Conv1D(filters=10, input_shape=(winsize, 10), kernel_size=kersize))
-    model.add(Conv1D(filters=10, kernel_size=10))
-    model.add(Activation('relu'))
-    model.add(Flatten())
-    model.add(Dense(4, activation="tanh"))
-    model.summary()
-    return model
+    conv_kernel = 10
+    model_dep = Sequential()
+    model_dep.add(Conv1D(10, conv_kernel, input_shape=(winsize, 10)))
+    model_dep.add(Conv1D(10, winsize - conv_kernel + 1))
+    model_dep.add(Activation('relu'))
+    model_dep.add(Flatten())
+    model_dep.add(Dense(4, activation='tanh'))
+    model_dep.compile(loss='mean_squared_error', optimizer='adam')
+    return model_dep
 
-def train_cnn(window_sizes, num_layers, num_nodes, optimizers):
+def train_cnn(data_list, window_sizes, optimizers):
     '''
     Params: lists
     Returns: list of errors for each combination of params
@@ -64,43 +64,66 @@ def train_cnn(window_sizes, num_layers, num_nodes, optimizers):
     '''
     errors = np.array([])
     for window_size in window_sizes:
-        for num_layer in num_layers:
-            for num_node in num_nodes:
-                for ix, optimizer in enumerate(optimizers):
-                    loss_per_trial = np.array([])
-                    for test_trial_num in trials:
-                        model = cnn_create_model(window_size)
-                        data = cnn_train_test_split(test_trial_num, window_size)
-                        model.compile(loss='mse', optimizer=optimizer)
-                        # early stopping
-                        early_stopping_callback = EarlyStopping(
-                            monitor='val_loss', 
-                            min_delta=0, 
-                            patience=5, 
-                            verbose=0)
-                        
-                        tensorboard_callback = TensorBoard(log_dir='./vis',
-                                                      profile_batch=0, histogram_freq=1)
+        for ix, optimizer in enumerate(optimizers):
+            loss_per_trial = np.array([])
+            for test_trial_num in trials[:2]:
+                model = cnn_create_model(window_size)
+                data = cnn_extract_features(data_list, window_size, test_trial_num)
+#                 model.compile(loss='mse', optimizer=optimizer,
+#                                 metrics=RootMeanSquaredError())
+                # early stopping
+                early_stopping_callback = EarlyStopping(
+                    monitor='val_loss', 
+                    min_delta=0, 
+                    patience=10, 
+                    verbose=0)
+                
+                tensorboard_callback = TensorBoard(log_dir='./vis',
+                                                profile_batch=0, histogram_freq=1)
 
-                        model.fit(
-                            data['X_train'], 
-                            data['y_train'], 
-                            epochs=3, 
-                            batch_size=128, 
-                            verbose=1,
-                            shuffle=True, 
-                            validation_split=0.15,
-                            callbacks=[early_stopping_callback, tensorboard_callback])
-                            
-                        y_preds = model.predict(data['X_test'])
-                        loss_per_trial = np.append(loss_per_trial, np.mean(custom_rmse(data['y_test'], y_preds)))
-                        clear_session()
-                    print(f'Loss in each trial: {loss_per_trial}')
-                    loss_mean = np.mean(loss_per_trial)
-                    errors = np.append(errors, loss_mean)
-                    print('Window Size: {} | RMSE: {:.2f}%'.format(
-                        window_size, loss_mean))
-                model.save('test_model_save_2')
+                history = model.fit(data['X_train'], data['y_train'], epochs=20, batch_size=128, verbose=0, validation_data=(data['X_test'], data['y_test']), shuffle=True, callbacks= [early_stopping_callback, tensorboard_callback])
+#                               plot_learning_curve(
+#                     history, test_trial_num, window_size)
+#                 plt.show()
+                y_preds = model.predict(data['X_test'])
+                
+                gp_x = y_preds[:,0]
+                gp_y = y_preds[:,1]
+                theta = np.arctan2(gp_y, gp_x)
+        
+                #Bring into range of 0 to 2pi
+                theta = np.mod(theta + 2*np.pi, 2*np.pi)
+
+                #Interpolate from 0 to 100%
+                gp = 100*theta / (2*np.pi)
+                
+                plt.figure()
+                plt.plot(gp[:1000])
+                plt.show()
+                
+                gp_x_2 = data['y_test'][:,0]
+                gp_y_2 = data['y_test'][:,1]
+                theta_2 = np.arctan2(gp_y_2, gp_x_2)
+        
+                #Bring into range of 0 to 2pi
+                theta_2 = np.mod(theta_2 + 2*np.pi, 2*np.pi)
+
+                #Interpolate from 0 to 100%
+                gp_2 = 100*theta_2 / (2*np.pi)
+                
+                plt.figure()
+                plt.plot(gp_2[:1000])
+                plt.show()
+                
+                left_rmse, right_rmse = custom_rmse(data['y_test'], y_preds)
+                loss_per_trial = np.append(loss_per_trial, np.mean((left_rmse, right_rmse)))
+                clear_session()
+            print(f'Loss in each trial: {loss_per_trial}')
+            loss_mean = np.mean(loss_per_trial)
+            errors = np.append(errors, loss_mean)
+            print('Window Size: {} | RMSE: {:.2f}%'.format(
+                window_size, loss_mean))
+        # model.save('test_model_save_2')
     np.savetxt('err.txt', errors)
 
 def custom_rmse(y_true, y_pred):
@@ -157,7 +180,7 @@ def custom_rmse(y_true, y_pred):
         #Interpolate from 0 to 100%
         gp[key] = 100*theta[key] / (2*np.pi)
 
-    return left_rmse, right_rmse, gp
+    return left_rmse, right_rmse
 
 
 
@@ -184,9 +207,19 @@ def plot_err(param):
     plt.grid()
     plt.show()
 
-def plot_gait_phase(y_true, y_pred):
-    plt.figure()
-    plt.plot(y_true)
-    plt.plot(y_pred)
+def plot_gait_phase(gp_true, gp_pred):
+    plt.plot(gp_true)
+    plt.plot(gp_pred)
     plt.title('CNN Gait Phase')
     plt.ylabel('Gait Phase (%)')
+    plt.legend(['True', 'Pred'])
+
+def plot_learning_curve(history, trial, winsize):
+    plt.plot(history.history['root_mean_squared_error'],
+             label='RMSE (training data)')
+    plt.plot(history.history['val_root_mean_squared_error'],
+            label='RMSE (validation data)')
+    plt.title(f'RMSE for trial {trial} window size {winsize}')
+    plt.ylabel('RMSE value')
+    plt.xlabel('No. epoch')
+    plt.legend(loc="upper left")
