@@ -35,11 +35,11 @@ def import_data(sensors):
 
 def import_labels():
     # Import labels
-    label1 = pd.read_csv('labels/label_trial1.txt')
-    label2 = pd.read_csv('labels/label_trial2.txt')
-    label3 = pd.read_csv('labels/label_trial3.txt')
-    label4 = pd.read_csv('labels/label_trial4.txt')
-    label5 = pd.read_csv('labels/label_trial5.txt')
+    label1 = pd.read_csv('labels/label_trial1_raw.txt')
+    label2 = pd.read_csv('labels/label_trial2_raw.txt')
+    label3 = pd.read_csv('labels/label_trial3_raw.txt')
+    label4 = pd.read_csv('labels/label_trial4_raw.txt')
+    label5 = pd.read_csv('labels/label_trial5_raw.txt')
     label_all = [label1, label2, label3, label4, label5]
     return label_all
 
@@ -152,6 +152,18 @@ def label_vectors(data):
     gait_phase_y = np.sin(y_theta)
     return gait_phase_x, gait_phase_y
 
+def label_vectors_raw(data):
+    # Create label vectors based on joint positions
+    # Does not convert to polar coordinates
+    maximas = find_local_maximas(data)
+    y = pd.Series(np.nan, index=range(0, data.shape[0]))
+    for maxima in maximas:
+        y[maxima] = 1
+        y[maxima+1] = 0
+    y.interpolate(inplace=True)
+    y.fillna(0, inplace=True)
+    return y
+
 
 def find_cutting_indices(left_data, right_data):
     # takes the left and right joint position arrays as input
@@ -240,7 +252,7 @@ def feature_extraction(data_list, labels_list, window_sizes, sensors, cut=True):
 def cnn_cut_data(data_list, cutting_indices_list):
     '''
     Params:
-        data_lsit: list of DataFrames
+        data_list: list of DataFrames
         cutting_indicces_list: list of integers representing the start and end
         of each new data object in the format of [start, end, ... start, end]
     Return:
@@ -286,3 +298,91 @@ def cnn_extract_images(data_list, window_sizes):
                 else: image_arr = np.dstack((image_arr, image))
             image_arr = np.transpose(image_arr, (2, 0, 1))[..., np.newaxis]
             np.save(filename+'_X', image_arr)
+
+def norm_matrix(data_list):
+    # Output: norm_matrix (2, 10) - features-wise min and max across data in data_list
+    min_full = np.zeros((1, 10))
+    max_full = np.zeros((1, 10))
+    for data in data_list:
+        data = data.to_numpy()
+        trial_X = data[:, :-2]
+        trial_min = np.reshape(trial_X.min(
+            axis=0, keepdims=True), (1, 10))
+        trial_max = np.reshape(trial_X.max(
+            axis=0, keepdims=True), (1, 10))
+        min_full = np.vstack((min_full, trial_min))
+        max_full = np.vstack((max_full, trial_max))
+    min_full = min_full[1:, :].min(axis=0)
+    max_full = max_full[1:, :].max(axis=0)
+    norm_matrix = np.vstack((min_full, max_full))
+    return norm_matrix
+    
+    
+def cnn_extract_features(data_list, window_size, testing_trial):
+#     norm = norm_matrix(data_list)
+#     full_min = np.reshape(norm[0, :], (1, 1, 10))
+#     full_max = np.reshape(norm[1, :], (1, 1, 10))
+    
+    X_test = np.zeros((1, window_size, 10))
+    Y_test = np.zeros((1, 4))
+    X_train = np.zeros((1, window_size, 10))
+    Y_train = np.zeros((1, 4))
+    data_out = {}     
+    for i, data in enumerate(data_list):
+        data = data.to_numpy()
+        if i+1 == testing_trial:
+            # Generate Testing Data
+            # raw gp%, not (x,y)
+            trial_X = data[:, :-4]
+            trial_Y = data[:, -4:]
+            
+            #Sliding window
+            shape_des = (trial_X.shape[0] - window_size + 1, window_size, trial_X.shape[-1])
+            strides_des = (
+                trial_X.strides[0], trial_X.strides[0], trial_X.strides[1])
+            trial_X = np.lib.stride_tricks.as_strided(trial_X, shape=shape_des,
+                                                    strides=strides_des)
+            trial_Y = trial_Y[window_size-1:]
+#             trial_Y_x = np.cos(trial_Y * math.pi * 2)
+#             trial_Y_y = np.sin(trial_Y * math.pi * 2)
+#             trial_Y = np.hstack((trial_Y_x.reshape(
+#                 trial_Y_x.shape[0], 2), trial_Y_y.reshape(trial_Y_y.shape[0], 2)))
+            
+#             trial_X = (trial_X - full_min)/(full_max-full_min)
+
+            X_test = np.concatenate([X_test, trial_X], axis=0)
+            Y_test = np.concatenate([Y_test, trial_Y], axis=0)
+
+            X_test = X_test[1:, :, :]
+            Y_test = Y_test[1:, :]
+
+            data_out['X_test'] = X_test
+            data_out['y_test'] = Y_test
+            
+        else:
+            # Generate Training Data
+            trial_X = data[:, :-4]
+            trial_Y = data[:,-4:] #raw gp%
+
+            #Sliding window
+            shape_des = (trial_X.shape[0] - window_size + 1, window_size, trial_X.shape[-1])
+            strides_des = (trial_X.strides[0], trial_X.strides[0], trial_X.strides[1])
+            trial_X = np.lib.stride_tricks.as_strided(trial_X, shape=shape_des,
+                        strides=strides_des)
+            trial_Y = trial_Y[window_size-1:]
+#             trial_Y_x = np.cos(trial_Y * (math.pi * 2))
+#             trial_Y_y = np.sin(trial_Y * (math.pi * 2))
+#             trial_Y = np.hstack((trial_Y_x, trial_Y_y))
+            # trial_X.shape = (N, winsize, 10), trial_Y.shape = (N, 4)
+
+#             trial_X = (trial_X - full_min)/(full_max-full_min)
+
+            X_train = np.concatenate([X_train, trial_X], axis=0)
+            Y_train = np.concatenate([Y_train, trial_Y], axis=0)
+
+    X_train = X_train[1:, :, :]
+    Y_train = Y_train[1:, :]
+    data_out['X_train'] = X_train
+    data_out['y_train'] = Y_train
+
+    return data_out
