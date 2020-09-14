@@ -204,48 +204,48 @@ def cut_features(features, cutting_indices):
     return features_cut
 
 
-def feature_extraction(data_list, labels_list, window_sizes, sensors, cut=True):
-    # Extracts the features from data based on the list of window sizes
-    # Combine the labels and the features
-    # Cut the standing portion of the data out
+# def feature_extraction(data_list, labels_list, window_sizes, sensors, cut=True):
+#     # Extracts the features from data based on the list of window sizes
+#     # Combine the labels and the features
+#     # Cut the standing portion of the data out
 
-    extractions = ['Min', 'Max', 'Std', 'Avg', 'Last']
+#     extractions = ['Min', 'Max', 'Std', 'Avg', 'Last']
     
-    # create a list of feature names
-    feature_columns = []
-    for extraction in extractions:
-        for sensor in sensors:
-            feature_columns.append(sensor+extraction)
+#     # create a list of feature names
+#     feature_columns = []
+#     for extraction in extractions:
+#         for sensor in sensors:
+#             feature_columns.append(sensor+extraction)
     
-    if cut: left_joint, right_joint = extract_joint_positions(data_list)
+#     if cut: left_joint, right_joint = extract_joint_positions(data_list)
 
-    for ix, data, labels in zip(range(1,6), data_list, labels_list):
-        # find the list indices to cut the data
-        if cut: cutting_indices = find_cutting_indices(left_joint[ix-1], 
-            right_joint[ix-1])
-        for window_size in window_sizes:
-            features = pd.DataFrame(columns=feature_columns)
-            if cut: cut_ix = cutting_indices - (window_size-1)
-            for i in range(window_size, data.shape[0]+1):
-                data_window = data[i-window_size:i]
-                feature = data_window.min()
-                feature = feature.append(data_window.max(), ignore_index=True)
-                feature = feature.append(data_window.std(), ignore_index=True)
-                feature = feature.append(data_window.mean(), ignore_index=True)
-                feature = feature.append(data_window.iloc[window_size-1], 
-                    ignore_index=True)
-                features_length = len(features)
-                features.loc[features_length] = feature.tolist()
+#     for ix, data, labels in zip(range(1,6), data_list, labels_list):
+#         # find the list indices to cut the data
+#         if cut: cutting_indices = find_cutting_indices(left_joint[ix-1], 
+#             right_joint[ix-1])
+#         for window_size in window_sizes:
+#             features = pd.DataFrame(columns=feature_columns)
+#             if cut: cut_ix = cutting_indices - (window_size-1)
+#             for i in range(window_size, data.shape[0]+1):
+#                 data_window = data[i-window_size:i]
+#                 feature = data_window.min()
+#                 feature = feature.append(data_window.max(), ignore_index=True)
+#                 feature = feature.append(data_window.std(), ignore_index=True)
+#                 feature = feature.append(data_window.mean(), ignore_index=True)
+#                 feature = feature.append(data_window.iloc[window_size-1], 
+#                     ignore_index=True)
+#                 features_length = len(features)
+#                 features.loc[features_length] = feature.tolist()
             
-            # Combine the features with the labels
-            features[labels.columns] = labels.iloc[window_size-1:].values
-            # Cut features as the cut_ix
-            if cut: featuress = cut_features(features, cut_ix)
-            # Save features as files
-            filename = f'features/trial{ix}_winsize{window_size}.txt'
-            if cut:
-                filename = f'features/cut_trial{ix}_winsize{window_size}.txt'
-            features.to_csv(filename, index=False)
+#             # Combine the features with the labels
+#             features[labels.columns] = labels.iloc[window_size-1:].values
+#             # Cut features as the cut_ix
+#             if cut: featuress = cut_features(features, cut_ix)
+#             # Save features as files
+#             filename = f'features/trial{ix}_winsize{window_size}.txt'
+#             if cut:
+#                 filename = f'features/cut_trial{ix}_winsize{window_size}.txt'
+#             features.to_csv(filename, index=False)
 
 ############## functions specificly for CNN ###################
 
@@ -267,37 +267,37 @@ def cnn_cut_data(data_list, cutting_indices_list):
             features_list.append(features)
     return features_list
 
-def cnn_extract_images(data_list, window_sizes):
-    '''
-    Params:
-        data_list: list of DataFrames
-        window_sizes: list of integers
-    Writes a features file and a labels files to ../features for each 
-    combination of data and window size
-    '''
-    for ix, data in enumerate(data_list):
-        # split features(X) and labels(y)
-        data = data.to_numpy()
-        label_columns = np.arange(10, 14)
-        X = np.delete(data, label_columns, axis=1)
-        y = data[:, label_columns]
+# def cnn_extract_images(data_list, window_sizes):
+#     '''
+#     Params:
+#         data_list: list of DataFrames
+#         window_sizes: list of integers
+#     Writes a features file and a labels files to ../features for each 
+#     combination of data and window size
+#     '''
+#     for ix, data in enumerate(data_list):
+#         # split features(X) and labels(y)
+#         data = data.to_numpy()
+#         label_columns = np.arange(10, 14)
+#         X = np.delete(data, label_columns, axis=1)
+#         y = data[:, label_columns]
 
-        for window_size in window_sizes:
-            filename = f'features/cnn_trial{ix+1}_winsize{window_size}'
-            # Store labels(y) as .npy files
-            # y.shape = (m, 4)
-            label_arr = y[window_size-1:, :]
-            np.save(filename+'_y',label_arr)
+#         for window_size in window_sizes:
+#             filename = f'features/cnn_trial{ix+1}_winsize{window_size}'
+#             # Store labels(y) as .npy files
+#             # y.shape = (m, 4)
+#             label_arr = y[window_size-1:, :]
+#             np.save(filename+'_y',label_arr)
 
-            # Extract images from X and store as .npy files
-            # X.shape = (m, win_size, 10, 1)
-            image_arr = None
-            for i in range(window_size, X.shape[0]+1):
-                image = X[i-window_size:i]
-                if image_arr is None: image_arr = image
-                else: image_arr = np.dstack((image_arr, image))
-            image_arr = np.transpose(image_arr, (2, 0, 1))[..., np.newaxis]
-            np.save(filename+'_X', image_arr)
+#             # Extract images from X and store as .npy files
+#             # X.shape = (m, win_size, 10, 1)
+#             image_arr = None
+#             for i in range(window_size, X.shape[0]+1):
+#                 image = X[i-window_size:i]
+#                 if image_arr is None: image_arr = image
+#                 else: image_arr = np.dstack((image_arr, image))
+#             image_arr = np.transpose(image_arr, (2, 0, 1))[..., np.newaxis]
+#             np.save(filename+'_X', image_arr)
 
 def norm_matrix(data_list):
     # Output: norm_matrix (2, 10) - features-wise min and max across data in data_list
@@ -305,7 +305,7 @@ def norm_matrix(data_list):
     max_full = np.zeros((1, 10))
     for data in data_list:
         data = data.to_numpy()
-        trial_X = data[:, :-2]
+        trial_X = data[:, :-4]
         trial_min = np.reshape(trial_X.min(
             axis=0, keepdims=True), (1, 10))
         trial_max = np.reshape(trial_X.max(
@@ -319,9 +319,9 @@ def norm_matrix(data_list):
     
     
 def cnn_extract_features(data_list, window_size, testing_trial):
-#     norm = norm_matrix(data_list)
-#     full_min = np.reshape(norm[0, :], (1, 1, 10))
-#     full_max = np.reshape(norm[1, :], (1, 1, 10))
+    norm = norm_matrix(data_list)
+    full_min = np.reshape(norm[0, :], (1, 1, 10))
+    full_max = np.reshape(norm[1, :], (1, 1, 10))
     
     X_test = np.zeros((1, window_size, 10))
     Y_test = np.zeros((1, 4))
@@ -348,7 +348,7 @@ def cnn_extract_features(data_list, window_size, testing_trial):
 #             trial_Y = np.hstack((trial_Y_x.reshape(
 #                 trial_Y_x.shape[0], 2), trial_Y_y.reshape(trial_Y_y.shape[0], 2)))
             
-#             trial_X = (trial_X - full_min)/(full_max-full_min)
+            # trial_X = (trial_X - full_min)/(full_max-full_min)
 
             X_test = np.concatenate([X_test, trial_X], axis=0)
             Y_test = np.concatenate([Y_test, trial_Y], axis=0)
@@ -375,7 +375,7 @@ def cnn_extract_features(data_list, window_size, testing_trial):
 #             trial_Y = np.hstack((trial_Y_x, trial_Y_y))
             # trial_X.shape = (N, winsize, 10), trial_Y.shape = (N, 4)
 
-#             trial_X = (trial_X - full_min)/(full_max-full_min)
+            # trial_X = (trial_X - full_min)/(full_max-full_min)
 
             X_train = np.concatenate([X_train, trial_X], axis=0)
             Y_train = np.concatenate([Y_train, trial_Y], axis=0)
