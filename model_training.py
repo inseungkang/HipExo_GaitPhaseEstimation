@@ -4,6 +4,7 @@ from tensorflow.keras.backend import clear_session
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Conv1D, Activation, Flatten, LSTM
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
+from tensorflow.keras.initializers import GlorotUniform
 from tensorflow.keras.layers.experimental.preprocessing import Normalization
 from data_processing import *
 
@@ -174,8 +175,16 @@ def lstm_model(sequence_length, n_features, lstm_config, dense_config, optim_con
     norm_layer = Normalization(input_shape=(sequence_length, n_features))
     norm_layer.adapt(X_train)
     model.add(norm_layer)
-    model.add(LSTM(return_sequences = False, **lstm_config))
-    model.add(Dense(4, **dense_config))
+    model.add(LSTM(
+        return_sequences = False, 
+        kernel_initializer=GlorotUniform(seed=1),
+        recurrent_initializer=GlorotUniform(seed=11),
+        bias_initializer=GlorotUniform(seed=25),
+        **lstm_config))
+    model.add(Dense(4,
+        kernel_initializer=GlorotUniform(seed=91),
+        bias_initializer=GlorotUniform(seed=74),
+        **dense_config))
     model.compile(**optim_config)
     return model
 
