@@ -149,45 +149,61 @@ def find_cutting_indices(left_data, right_data):
 
 
 def nn_extract_features(data_list, window_size, testing_trial):
-    # TODO: fix this method for sliding windows of NN
+    X_train = np.zeros((1, 50))
+    Y_train = np.zeros((1, 4))
+    data_out = {}
+    for i, data in enumerate(data_list):
+        trial_X = data.iloc[:, :-4]
+        trial_Y = data.iloc[:, -4:]
+        if i+1 == testing_trial:
+            feature_extracted_data = pd.DataFrame()
+            for ix, column in enumerate(trial_X.columns):
+                single_column = trial_X.iloc[:, i].values
+                shape_des = single_column.shape[:-1] + \
+                    (single_column.shape[-1] - window_size + 1, window_size)
+                strides_des = single_column.strides + \
+                    (single_column.strides[-1],)
 
-    # Extracts the features from data based on the list of window sizes
-    # Combine the labels and the features
-    # Cut the standing portion of the data out
-    extractions = ['Min', 'Max', 'Std', 'Avg', 'Last']
+                sliding_window = np.lib.stride_tricks.as_strided(
+                    single_column, shape=shape_des, strides=strides_des)
+                sliding_window_df = pd.DataFrame(sliding_window)
 
-    # create a list of feature names
-    feature_columns = []
-    for extraction in extractions:
-        for sensor in sensors:
-            feature_columns.append(sensor+extraction)
+                min_series = sliding_window_df.min(axis=1)
+                max_series = sliding_window_df.max(axis=1)
+                mean_series = sliding_window_df.mean(axis=1)
+                std_series = sliding_window_df.std(axis=1)
+                last_series = sliding_window_df.iloc[:, -1]
 
-    left_joint, right_joint = extract_joint_positions(data_list)
+                feature_extracted_data = pd.concat([feature_extracted_data, round(min_series, 4), round(max_series, 4), round(
+                    mean_series, 4), round(std_series, 4), round(last_series, 4)], axis=1, ignore_index=True)
+            Y_test = trial_Y.iloc[window_size-1:].to_numpy()
+            data_out['X_test'] = feature_extracted_data
+            data_out['y_test'] = Y_test
+        else:
+            feature_extracted_data = pd.DataFrame()
+            for ix, column in enumerate(trial_X.columns):
+                single_column = trial_X.iloc[:, i].values
+                shape_des = single_column.shape[:-1] + \
+                    (single_column.shape[-1] - window_size + 1, window_size)
+                strides_des = single_column.strides + (single_column.strides[-1],)
 
-    for ix, data in enumerate(data_list):
-        # find the list indices to cut the data
-        if cut:
-            cutting_indices = find_cutting_indices(left_joint[ix-1],
-                                                   right_joint[ix-1])
-        features = pd.DataFrame(columns=feature_columns)
-        if cut:
-            cut_ix = cutting_indices - (window_size-1)
-        for i in range(window_size, data.shape[0]+1):
-            data_window = data[i-window_size:i]
-            feature = data_window.min()
-            feature = feature.append(data_window.max(), ignore_index=True)
-            feature = feature.append(data_window.std(), ignore_index=True)
-            feature = feature.append(data_window.mean(), ignore_index=True)
-            feature = feature.append(data_window.iloc[window_size-1],
-                                     ignore_index=True)
-            features_length = len(features)
-            features.loc[features_length] = feature.tolist()
+                sliding_window = np.lib.stride_tricks.as_strided(
+                    single_column, shape=shape_des, strides=strides_des)
+                sliding_window_df = pd.DataFrame(sliding_window)
 
-        # Combine the features with the labels
-        features[labels.columns] = labels.iloc[window_size-1:].values
-        # Cut features as the cut_ix
-        if cut:
-            featuress = cut_data(features)
+                min_series = sliding_window_df.min(axis=1)
+                max_series = sliding_window_df.max(axis=1)
+                mean_series = sliding_window_df.mean(axis=1)
+                std_series = sliding_window_df.std(axis=1)
+                last_series = sliding_window_df.iloc[:, -1]
+
+                feature_extracted_data = pd.concat([feature_extracted_data, round(min_series, 4), round(max_series, 4), round(
+                    mean_series, 4), round(std_series, 4), round(last_series, 4)], axis=1, ignore_index=True)
+            trial_Y = trial_Y.iloc[window_size-1:].to_numpy()
+            X_train = np.concatenate([X_train, feature_extracted_data], axis=0)
+            Y_train = np.concatenate([Y_train, trial_Y], axis=0)
+    data_out['X_train'] = X_train
+    data_out['y_train'] = Y_train
     return data_out
 
 
