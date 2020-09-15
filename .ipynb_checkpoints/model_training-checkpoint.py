@@ -4,8 +4,9 @@ from tensorflow.keras.backend import clear_session
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Conv1D, Activation, Flatten, LSTM
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
+from tensorflow.keras.initializers import GlorotUniform
 from tensorflow.keras.layers.experimental.preprocessing import Normalization
-from data_processing import *
+from clean_data_processing import *
 
 def get_model_configs(hyperparam_space):
     model_configs = []
@@ -116,8 +117,8 @@ def train_models(model_type, hyperparameter_configs, data_list):
             trial_result = {}
             trial_result['trial'] = i
             trial_result['window_size'] = trial['model_config']['window_size']
-            for key in trial['model_config']['lstm'].keys():
-                trial_result['lstm_{}'.format(key)] = trial['model_config']['lstm'][key]
+            for key in trial['model_config'][model_type].keys():
+                trial_result['{}_{}'.format(model_type, key)] = trial['model_config'][model_type][key]
 
             for key in trial['model_config']['dense'].keys():
                 trial_result['dense_{}'.format(key)] = trial['model_config']['dense'][key]
@@ -163,9 +164,12 @@ def create_model(model_config, dataset):
                            optim_config=model_config['optimizer'],
                            X_train=dataset['X_train'].squeeze())
     elif (model_config['model'] == 'cnn'):
-        return cnn_model(model_config['window_size'],
+        return cnn_model(window_size=model_config['window_size'],
+                         n_features=10,
+                         cnn_config=model_config['cnn'],
+                         dense_config=model_config['dense'],
                          optim_config=model_config['optimizer'],
-                         X_train= dataset['X_train'])
+                         X_train=dataset['X_train'])
     else:
         raise Exception('No model generator for model type')
         
@@ -174,22 +178,40 @@ def lstm_model(sequence_length, n_features, lstm_config, dense_config, optim_con
     norm_layer = Normalization(input_shape=(sequence_length, n_features))
     norm_layer.adapt(X_train)
     model.add(norm_layer)
-    model.add(LSTM(return_sequences = False, **lstm_config))
-    model.add(Dense(4, **dense_config))
+    model.add(LSTM(
+                return_sequences = False, 
+                kernel_initializer=GlorotUniform(seed=1),
+                recurrent_initializer=GlorotUniform(seed=11),
+                bias_initializer=GlorotUniform(seed=25),
+                **lstm_config))
+    model.add(Dense(4,
+                kernel_initializer=GlorotUniform(seed=91),
+                bias_initializer=GlorotUniform(seed=74),
+                **dense_config))
     model.compile(**optim_config)
     return model
 
-def cnn_model(window_size, optim_config, X_train):
-    conv_kernel = 10
+def cnn_model(window_size, n_features, cnn_config, dense_config, optim_config, X_train):
+    conv_kernel = cnn_config['kernel_size']
     model = Sequential()
-    norm_layer = Normalization(input_shape=(window_size, 10))
+    norm_layer = Normalization(input_shape=(window_size, n_features))
     norm_layer.adapt(X_train)
     model.add(norm_layer)
-    model.add(Conv1D(10, conv_kernel, input_shape=(window_size, 10), kernel_regularizer='l2'))
-    model.add(Conv1D(10, (int)(window_size - conv_kernel + 1), kernel_regularizer='l2'))
-    model.add(Activation('relu'))
+    model.add(Conv1D(10,
+                conv_kernel,
+                input_shape=(window_size, n_features), 
+                kernel_initializer=GlorotUniform(seed=1),
+                bias_initializer=GlorotUniform(seed=11)))
+    model.add(Conv1D(10,
+                (int)(window_size - conv_kernel + 1),
+                kernel_initializer=GlorotUniform(seed=25),
+                bias_initializer=GlorotUniform(seed=91)))
+    model.add(Activation(cnn_config['activation']))
     model.add(Flatten())
-    model.add(Dense(4, activation='tanh', kernel_regularizer='l2'))
+    model.add(Dense(4,
+                dense_config['activation'],
+                kernel_initializer=GlorotUniform(seed=74),
+                bias_initializer=GlorotUniform(seed=52)))
     model.compile(**optim_config)
     return model
 
@@ -252,8 +274,10 @@ def custom_rmse(y_true, y_pred):
 def results_mapper(x):
     out = {}
     out['window_size'] = x['model_config']['window_size']
-    for key in x['model_config']['lstm'].keys():
-        out['lstm_{}'.format(key)] = x['model_config']['lstm'][key]
+    model_type = x['model_config']['model']
+    out['model_type'] = model_type
+    for key in x['model_config'][model_type].keys():
+        out['{}_{}'.format(model_type, key)] = x['model_config'][model_type][key]
 
     for key in x['model_config']['dense'].keys():
         out['dense_{}'.format(key)] = x['model_config']['dense'][key]
@@ -263,7 +287,7 @@ def results_mapper(x):
         
     for key in x['model_config']['training'].keys():
         out['training_{}'.format(key)] = x['model_config']['training'][key]
-
+    
     out['left_rmse_mean'] = x['left_rmse_mean']
     out['right_rmse_mean'] = x['right_rmse_mean']
     return out
