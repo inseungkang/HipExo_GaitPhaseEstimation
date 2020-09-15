@@ -12,20 +12,21 @@ def get_model_configs(hyperparam_space):
     model_configs = []
     model_type = hyperparam_space['model']
     for window_size in hyperparam_space['window_size']:
-        type_specific_params = list(hyperparam_space[model_type].keys())
+        if (model_type != 'mlp'):
+            type_specific_params = list(hyperparam_space[model_type].keys())
 
-        type_specific_possibilities = []
+            type_specific_possibilities = []
 
-        for param in type_specific_params:
-            type_specific_possibilities.append(hyperparam_space[model_type][param])
+            for param in type_specific_params:
+                type_specific_possibilities.append(hyperparam_space[model_type][param])
 
-        type_specific_config_tuples = itertools.product(*type_specific_possibilities)
-        type_specific_configs = []
-        for config in type_specific_config_tuples:
-            type_specific_config = {}
-            for i, value in enumerate(config):
-                type_specific_config[type_specific_params[i]] = value
-            type_specific_configs.append(type_specific_config)
+            type_specific_config_tuples = itertools.product(*type_specific_possibilities)
+            type_specific_configs = []
+            for config in type_specific_config_tuples:
+                type_specific_config = {}
+                for i, value in enumerate(config):
+                    type_specific_config[type_specific_params[i]] = value
+                type_specific_configs.append(type_specific_config)
 
         dense_params = list(hyperparam_space['dense'].keys())
 
@@ -71,20 +72,35 @@ def get_model_configs(hyperparam_space):
             for i, value in enumerate(config):
                 training_config[training_params[i]] = value
             training_configs.append(training_config)
+        
+        if model_type != 'mlp':
+            possible_configs = itertools.product(type_specific_configs, dense_configs, optim_configs, training_configs)
+            config_count = 0
+            for config in possible_configs:
+                config_count += 1
+                config_obj = {
+                    'window_size': window_size,
+                    'model': model_type,
+                    'dense': config[1],
+                    'optimizer': config[2],
+                    'training': config[3]
+                }
+                config_obj[model_type] = config[0]
+                model_configs.append(config_obj)
+        else:
+            possible_configs = itertools.product(dense_configs, optim_configs, training_configs)
+            config_count = 0
+            for config in possible_configs:
+                config_count += 1
+                config_obj = {
+                    'window_size': window_size,
+                    'model': model_type,
+                    'dense': config[1],
+                    'optimizer': config[2],
+                    'training': config[3]
+                }
+                model_configs.append(config_obj)
 
-        possible_configs = itertools.product(type_specific_configs, dense_configs, optim_configs, training_configs)
-        config_count = 0
-        for config in possible_configs:
-            config_count += 1
-            config_obj = {
-                'window_size': window_size,
-                'model': model_type,
-                'dense': config[1],
-                'optimizer': config[2],
-                'training': config[3]
-            }
-            config_obj[model_type] = config[0]
-            model_configs.append(config_obj)
     return model_configs
 
 def train_models(model_type, hyperparameter_configs, data_list):
@@ -117,8 +133,10 @@ def train_models(model_type, hyperparameter_configs, data_list):
             trial_result = {}
             trial_result['trial'] = i
             trial_result['window_size'] = trial['model_config']['window_size']
-            for key in trial['model_config'][model_type].keys():
-                trial_result['{}_{}'.format(model_type, key)] = trial['model_config'][model_type][key]
+            
+            if (model_type != 'mlp'):
+                for key in trial['model_config'][model_type].keys():
+                    trial_result['{}_{}'.format(model_type, key)] = trial['model_config'][model_type][key]
 
             for key in trial['model_config']['dense'].keys():
                 trial_result['dense_{}'.format(key)] = trial['model_config']['dense'][key]
@@ -151,7 +169,8 @@ def get_dataset(model_type, data_list, window_size, test_trial):
         dataset['X_test'] = dataset['X_test'].squeeze()
         dataset['y_test'] = dataset['y_test'].squeeze()
         return dataset
-        
+    elif model_type == 'mlp':
+        return None
     else:
         raise Exception('No dataset for model type')
         
@@ -167,6 +186,12 @@ def create_model(model_config, dataset):
         return cnn_model(window_size=model_config['window_size'],
                          n_features=10,
                          cnn_config=model_config['cnn'],
+                         dense_config=model_config['dense'],
+                         optim_config=model_config['optimizer'],
+                         X_train=dataset['X_train'])
+    elif (model_config['model'] == 'mlp'):
+        return mlp_model(window_size=model_config['window_size'],
+                         n_features=10,
                          dense_config=model_config['dense'],
                          optim_config=model_config['optimizer'],
                          X_train=dataset['X_train'])
@@ -212,6 +237,17 @@ def cnn_model(window_size, n_features, cnn_config, dense_config, optim_config, X
                 dense_config['activation'],
                 kernel_initializer=GlorotUniform(seed=74),
                 bias_initializer=GlorotUniform(seed=52)))
+    model.compile(**optim_config)
+    return model
+
+def mlp_model(window_size, n_features, dense_config, optim_config, X_train):
+    model = Sequential()
+    norm_layer = Normalization(input_shape=(window_size, n_features))
+    norm_layer.adapt(X_train)
+    model.add(norm_layer)
+    for x in range(dense_config['num_layers']):
+        model.add(Dense(dense_config['num_nodes'], activation=dense_config['activation']))
+    model.add(Dense(4))
     model.compile(**optim_config)
     return model
 
