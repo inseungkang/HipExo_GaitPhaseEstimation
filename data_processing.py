@@ -12,6 +12,14 @@ sensors = ['leftJointPosition', 'rightJointPosition', 'leftJointVelocity',
 
 
 def import_data():
+    """imports all 5 trials of data, take only the columns corresponds to 
+    sensors in the sensors list. Format them into dataframe and put them in a
+    list.
+
+    Returns:
+        list[Dataframes]: 5 trials of data of shape (M, 10)
+    """
+    
     # Read data
     columns = pd.read_csv('data/columns.txt', header=None)
     data1 = pd.read_csv('data/trial_1.txt', sep=" ", header=None)
@@ -37,11 +45,19 @@ def import_data():
 
 
 def label_data(data):
+    """Label the data, and combine the data with the label columns
+
+    Args:
+        data (list[Dataframes]): 5 trials of data of shape (M, 10)
+
+    Returns:
+        list[Dataframes]: 5 trials of data of shape (M, 14)
+    """
+    
     left_joint_positions, right_joint_positions = extract_joint_positions(data)
 
     labels = []
     for i in range(5):
-        filename = "labels/label_trial{}.txt".format(i+1)
         left_x, left_y = label_vectors(left_joint_positions[i])
         right_x, right_y = label_vectors(right_joint_positions[i])
         label_df = pd.DataFrame({'leftGaitPhaseX': left_x, 'leftGaitPhaseY': left_y,
@@ -56,6 +72,14 @@ def label_data(data):
 
 
 def cut_data(data):
+    """Cut the standing phase of data off and split data into segments
+
+    Args:
+        data (list[Dataframes]): 5 trials of data of shape (M, 14)
+
+    Returns:
+        list[Dataframes]: 10 segments of data of shape (N, 14)
+    """
     left_joint_positions, right_joint_positions = extract_joint_positions(data)
 
     # Creat a list of cut_indicies for each trial
@@ -74,6 +98,16 @@ def cut_data(data):
 
 
 def extract_joint_positions(data_all):
+    """Extracts the left and right joint position data from each trial and put
+    them in a list
+
+    Args:
+        data_all (list[Dataframes]): data containing sensors information
+
+    Returns:
+        left_joint_positions (list[Series]): left joint positions from each trials
+        right_joint_positions (list[Series]): right joint positions from each trials
+    """
     left_joint_positions, right_joint_positions = [], []
     for data in data_all:
         # create joing position lists
@@ -82,31 +116,50 @@ def extract_joint_positions(data_all):
     return left_joint_positions, right_joint_positions
 
 
-def find_local_maximas(data):
+def find_local_maximas(joint_positions):
+    """find the maximas in joint positions
+
+    Args:
+        joint_positions (Series): joint position time seire data
+
+    Returns:
+        [ndarray]: a list of local maximas for joint position
+    """
     # Peak detection using scipy.signal.find_peaks()
 
-    data = data.rolling(10).mean()  # smooth out the data
-    peaks, _ = find_peaks(data)  # find all extremas in the data
+    joint_positions = joint_positions.rolling(10).mean()  # smooth out the joint positions
+    peaks, _ = find_peaks(joint_positions)  # find all extremas in the joint positions
 
     # find a list of prominences for all extremas
-    prominences = peak_prominences(data, peaks)[0]
-    width = peak_widths(data, peaks)[0]
+    prominences = peak_prominences(joint_positions, peaks)[0]
+    width = peak_widths(joint_positions, peaks)[0]
 
     # find maximas
     # Constrains:   prominance of peaks > median + variance of prominances
-    #               height of peaks > mean(data)
+    #               height of peaks > mean(joint_positions)
     #               distance between peaks > 100 samples
     #               width of peak < mean + 4*std of width
-    maximas, _ = find_peaks(data, prominence=np.median(prominences)+np.var(prominences), height=np.mean(data), distance=100,
+    maximas, _ = find_peaks(joint_positions, prominence=np.median(prominences)+np.var(prominences), 
+                            height=np.mean(joint_positions), distance=100,
                             wlen=np.mean(width)+4*np.std(width))
 
     return maximas
 
 
-def label_vectors(data):
+def label_vectors(joint_positions):
+    """generates the gait phase from a joint position time series data and
+converts to polar coordinates
+
+    Args:
+        joint_positions (Series): joint position time seire data
+
+    Returns:
+        gait_phase_x (float): the polar coordinate x gait phase
+        gait_phase_y (float): the polar coordinate y gait phase
+    """
     # Create label vectors based on joint positions and convert to polar coordinates
-    maximas = find_local_maximas(data)
-    y = pd.Series(np.nan, index=range(0, data.shape[0]))
+    maximas = find_local_maximas(joint_positions)
+    y = pd.Series(np.nan, index=range(0, joint_positions.shape[0]))
     for maxima in maximas:
         y[maxima] = 1
         y[maxima+1] = 0
@@ -119,6 +172,15 @@ def label_vectors(data):
 
 
 def find_cutting_indices(left_data, right_data):
+    """generates a list of indices where the data should be cut off
+
+    Args:
+        left_data (Series): left joint position
+        right_data (Series): right joint position
+
+    Returns:
+        ndarray: indices where the data should be cut off at
+    """
     # takes the left and right joint position arrays as input
     # returns a list of indices representing the starting and ending indices of training data to keep [start, end, start, end, ...]
     left_maximas = find_local_maximas(left_data)
@@ -149,50 +211,86 @@ def find_cutting_indices(left_data, right_data):
 
 
 def nn_extract_features(data_list, window_size, testing_trial):
-    # TODO: fix this method for sliding windows of NN
+    """feature extraction for regular MLP
 
-    # Extracts the features from data based on the list of window sizes
-    # Combine the labels and the features
-    # Cut the standing portion of the data out
-    extractions = ['Min', 'Max', 'Std', 'Avg', 'Last']
+    Args:
+        data_list (list[DataFrames]): list of all data of shape (M, 14)
+        window_size (int): window size
+        testing_trial (int): between 1 - 10, represents the test trial
 
-    # create a list of feature names
-    feature_columns = []
-    for extraction in extractions:
-        for sensor in sensors:
-            feature_columns.append(sensor+extraction)
+    Returns:
+        dictionary: X_train, X_test - (M, 50); y_train, y_test - (M, 4)
+    """
+    X_train = np.zeros((1, 50))
+    Y_train = np.zeros((1, 4))
+    data_out = {}
+    for i, data in enumerate(data_list):
+        trial_X = data.iloc[:, :-4]
+        trial_Y = data.iloc[:, -4:]
+        if i+1 == testing_trial:
+            feature_extracted_data = pd.DataFrame()
+            for ix, column in enumerate(trial_X.columns):
+                single_column = trial_X.iloc[:, i].values
+                shape_des = single_column.shape[:-1] + \
+                    (single_column.shape[-1] - window_size + 1, window_size)
+                strides_des = single_column.strides + \
+                    (single_column.strides[-1],)
 
-    left_joint, right_joint = extract_joint_positions(data_list)
+                sliding_window = np.lib.stride_tricks.as_strided(
+                    single_column, shape=shape_des, strides=strides_des)
+                sliding_window_df = pd.DataFrame(sliding_window)
 
-    for ix, data in enumerate(data_list):
-        # find the list indices to cut the data
-        if cut:
-            cutting_indices = find_cutting_indices(left_joint[ix-1],
-                                                   right_joint[ix-1])
-        features = pd.DataFrame(columns=feature_columns)
-        if cut:
-            cut_ix = cutting_indices - (window_size-1)
-        for i in range(window_size, data.shape[0]+1):
-            data_window = data[i-window_size:i]
-            feature = data_window.min()
-            feature = feature.append(data_window.max(), ignore_index=True)
-            feature = feature.append(data_window.std(), ignore_index=True)
-            feature = feature.append(data_window.mean(), ignore_index=True)
-            feature = feature.append(data_window.iloc[window_size-1],
-                                     ignore_index=True)
-            features_length = len(features)
-            features.loc[features_length] = feature.tolist()
+                min_series = sliding_window_df.min(axis=1)
+                max_series = sliding_window_df.max(axis=1)
+                mean_series = sliding_window_df.mean(axis=1)
+                std_series = sliding_window_df.std(axis=1)
+                last_series = sliding_window_df.iloc[:, -1]
 
-        # Combine the features with the labels
-        features[labels.columns] = labels.iloc[window_size-1:].values
-        # Cut features as the cut_ix
-        if cut:
-            featuress = cut_data(features)
+                feature_extracted_data = pd.concat([feature_extracted_data, round(min_series, 4), round(max_series, 4), round(
+                    mean_series, 4), round(std_series, 4), round(last_series, 4)], axis=1, ignore_index=True)
+            Y_test = trial_Y.iloc[window_size-1:].to_numpy()
+            data_out['X_test'] = feature_extracted_data
+            data_out['y_test'] = Y_test
+        else:
+            feature_extracted_data = pd.DataFrame()
+            for ix, column in enumerate(trial_X.columns):
+                single_column = trial_X.iloc[:, i].values
+                shape_des = single_column.shape[:-1] + \
+                    (single_column.shape[-1] - window_size + 1, window_size)
+                strides_des = single_column.strides + (single_column.strides[-1],)
+
+                sliding_window = np.lib.stride_tricks.as_strided(
+                    single_column, shape=shape_des, strides=strides_des)
+                sliding_window_df = pd.DataFrame(sliding_window)
+
+                min_series = sliding_window_df.min(axis=1)
+                max_series = sliding_window_df.max(axis=1)
+                mean_series = sliding_window_df.mean(axis=1)
+                std_series = sliding_window_df.std(axis=1)
+                last_series = sliding_window_df.iloc[:, -1]
+
+                feature_extracted_data = pd.concat([feature_extracted_data, round(min_series, 4), round(max_series, 4), round(
+                    mean_series, 4), round(std_series, 4), round(last_series, 4)], axis=1, ignore_index=True)
+            trial_Y = trial_Y.iloc[window_size-1:].to_numpy()
+            X_train = np.concatenate([X_train, feature_extracted_data], axis=0)
+            Y_train = np.concatenate([Y_train, trial_Y], axis=0)
+    data_out['X_train'] = X_train
+    data_out['y_train'] = Y_train
     return data_out
 
 
 def cnn_extract_features(data_list, window_size, testing_trial):
+    """feature extraction for CNN and LSTM
 
+    Args:
+        data_list (list[DataFrames]): list of all data of shape (M, 14)
+        window_size (int): window size
+        testing_trial (int): between 1 - 10, represents the test trial
+
+    Returns:
+        dictionary: X_train, X_test - (M, window_size, 10); y_train, y_test - (M, 4)
+    """
+    
     X_test = np.zeros((1, window_size, 10))
     Y_test = np.zeros((1, 4))
     X_train = np.zeros((1, window_size, 10))
