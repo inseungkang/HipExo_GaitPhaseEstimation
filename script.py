@@ -8,5 +8,5 @@ data = cut_data(data)
 ###################### Training Neural Network ##################
 window_sizes = np.arange(20, 221, 20)
 
-train_cnn(data_list, window_sizes, [Adam()])
+train_cnn(data, window_sizes, ['adam'])
 plot_err(window_sizes * 5)
