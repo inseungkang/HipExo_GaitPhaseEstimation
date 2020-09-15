@@ -7,7 +7,7 @@ from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, TensorBoa
 from keras.metrics import RootMeanSquaredError
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
-from data_processing import cnn_extract_features
+from clean_data_processing import cnn_extract_features
 from tensorflow.keras.layers.experimental.preprocessing import Normalization 
 
 trials = np.arange(1, 11)
