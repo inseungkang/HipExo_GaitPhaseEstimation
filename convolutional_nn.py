@@ -90,26 +90,6 @@ def train_cnn(data_list, window_sizes, optimizers):
                 plt.show()
                 y_preds = model.predict(data['X_test'])
                 
-                gp_x = y_preds[:,0]
-                gp_y = y_preds[:,1]
-                theta = np.arctan2(gp_y, gp_x)
-        
-                #Bring into range of 0 to 2pi
-                theta = np.mod(theta + 2*np.pi, 2*np.pi)
-
-                #Interpolate from 0 to 100%
-                gp = 100*theta / (2*np.pi)
-                
-                gp_x_2 = data['y_test'][:,0]
-                gp_y_2 = data['y_test'][:,1]
-                theta_2 = np.arctan2(gp_y_2, gp_x_2)
-        
-                #Bring into range of 0 to 2pi
-                theta_2 = np.mod(theta_2 + 2*np.pi, 2*np.pi)
-
-                #Interpolate from 0 to 100%
-                gp_2 = 100*theta_2 / (2*np.pi)
-                
                 left_rmse, right_rmse = custom_rmse(data['y_test'], y_preds)
                 loss_per_trial = np.append(loss_per_trial, np.mean((left_rmse, right_rmse)))
                 clear_session()
