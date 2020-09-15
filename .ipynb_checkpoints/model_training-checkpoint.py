@@ -107,14 +107,38 @@ def train_models(model_type, hyperparameter_configs, data_list):
             current_result['right_validation_rmse'].append(right_rmse)
             clear_session()
         results.append(current_result)
-        
+    
+    per_trial_results = []
+    for trial in results:
+        left_val_rmse = trial['left_validation_rmse']
+        right_val_rmse = trial['right_validation_rmse']
+        for i in np.arange(2):
+            trial_result = {}
+            trial_result['trial'] = i
+            trial_result['window_size'] = trial['model_config']['window_size']
+            for key in trial['model_config']['lstm'].keys():
+                trial_result['lstm_{}'.format(key)] = trial['model_config']['lstm'][key]
+
+            for key in trial['model_config']['dense'].keys():
+                trial_result['dense_{}'.format(key)] = trial['model_config']['dense'][key]
+
+            for key in trial['model_config']['optimizer'].keys():
+                trial_result['optim_{}'.format(key)] = trial['model_config']['optimizer'][key]
+
+            for key in trial['model_config']['training'].keys():
+                trial_result['training_{}'.format(key)] = trial['model_config']['training'][key]
+            trial_result['left_validation_rmse'] = left_val_rmse[i]
+            trial_result['right_validation_rmse'] = right_val_rmse[i]
+            per_trial_results.append(trial_result)
+    df_per_trial_results = pd.DataFrame(per_trial_results)
+
     for model in results:
         model['left_rmse_mean'] = np.mean(model['left_validation_rmse'])
         model['right_rmse_mean'] = np.mean(model['right_validation_rmse'])
-        
-    results_array = list(map(results_mapper, results))
-    df_results = pd.DataFrame(results_array)
-    return df_results
+                
+    averaged_results = list(map(results_mapper, results))
+    df_results = pd.DataFrame(averaged_results)
+    return (df_per_trial_results, df_results)
 
 def get_dataset(model_type, data_list, window_size, test_trial):
     if model_type == 'cnn':
