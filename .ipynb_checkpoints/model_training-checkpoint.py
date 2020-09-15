@@ -8,6 +8,10 @@ from tensorflow.keras.initializers import GlorotUniform
 from tensorflow.keras.layers.experimental.preprocessing import Normalization
 from data_processing import *
 
+# Takes hyperparameter search space and creates an
+#  array of model & training configurations based
+#  on all possible combinations of all
+#  hyperparameters
 def get_model_configs(hyperparam_space):
     model_configs = []
     model_type = hyperparam_space['model']
@@ -103,6 +107,11 @@ def get_model_configs(hyperparam_space):
 
     return model_configs
 
+# Takes a list of model configurations and trains
+#  K models for each, where K is the number of
+#  trials in the dataset. For each configuration, there
+#  will be K estimates of performance, each from a
+#  Leave-one-trial-out approach
 def train_models(model_type, hyperparameter_configs, data_list):
     results = []
     for model_config in hyperparameter_configs:
@@ -159,6 +168,8 @@ def train_models(model_type, hyperparameter_configs, data_list):
     df_results = pd.DataFrame(averaged_results)
     return (df_per_trial_results, df_results)
 
+# Retrieve the appropriate dataset & train/test split
+#  based on the model, test trial, and window set
 def get_dataset(model_type, data_list, window_size, test_trial):
     if model_type == 'cnn':
         return cnn_extract_features(data_list, window_size, test_trial)
@@ -173,7 +184,8 @@ def get_dataset(model_type, data_list, window_size, test_trial):
         return None
     else:
         raise Exception('No dataset for model type')
-        
+
+# Creates the appropriate model based on the configuration
 def create_model(model_config, dataset):
     if (model_config['model'] == 'lstm'):
         return lstm_model(sequence_length=model_config['window_size'],
@@ -197,7 +209,8 @@ def create_model(model_config, dataset):
                          X_train=dataset['X_train'])
     else:
         raise Exception('No model generator for model type')
-        
+
+# Creates an LSTM model based on the specified configuration
 def lstm_model(sequence_length, n_features, lstm_config, dense_config, optim_config, X_train):
     model = Sequential()
     norm_layer = Normalization(input_shape=(sequence_length, n_features))
@@ -216,6 +229,7 @@ def lstm_model(sequence_length, n_features, lstm_config, dense_config, optim_con
     model.compile(**optim_config)
     return model
 
+# Creates a CNN model based on the specified configuration
 def cnn_model(window_size, n_features, cnn_config, dense_config, optim_config, X_train):
     conv_kernel = cnn_config['kernel_size']
     model = Sequential()
@@ -240,6 +254,7 @@ def cnn_model(window_size, n_features, cnn_config, dense_config, optim_config, X
     model.compile(**optim_config)
     return model
 
+# Creates an MLP model based on the specified configuration
 def mlp_model(window_size, n_features, dense_config, optim_config, X_train):
     model = Sequential()
     norm_layer = Normalization(input_shape=(window_size, n_features))
@@ -251,6 +266,8 @@ def mlp_model(window_size, n_features, dense_config, optim_config, X_train):
     model.compile(**optim_config)
     return model
 
+# Uses cosine distance to calculate the RMSE
+#  in gait phase percentage
 def custom_rmse(y_true, y_pred):
     #Raw values and Prediction are in X,Y
     labels, theta, gp = {}, {}, {}
@@ -307,6 +324,8 @@ def custom_rmse(y_true, y_pred):
 
     return left_rmse, right_rmse
 
+# Maps hyperparameter search results into a good
+#  format to present in a DataFrame
 def results_mapper(x):
     out = {}
     out['window_size'] = x['model_config']['window_size']
