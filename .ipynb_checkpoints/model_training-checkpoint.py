@@ -1,4 +1,11 @@
 import itertools
+import numpy as np
+from tensorflow.keras.backend import clear_session
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Conv1D, Activation, Flatten, LSTM
+from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
+from tensorflow.keras.layers.experimental.preprocessing import Normalization
+from data_processing import *
 
 def get_model_configs(hyperparam_space):
     model_configs = []
@@ -48,44 +55,191 @@ def get_model_configs(hyperparam_space):
             for i, value in enumerate(config):
                 optim_config[optim_params[i]] = value
             optim_configs.append(optim_config)
+            
+        training_params = list(hyperparam_space['training'].keys())
 
-        possible_configs = itertools.product(type_specific_configs, dense_configs, optim_configs)
+        training_possibilities = []
+
+        for param in training_params:
+            training_possibilities.append(hyperparam_space['training'][param])
+
+        training_config_tuples = itertools.product(*training_possibilities)
+        training_configs = []
+        for config in training_config_tuples:
+            training_config = {}
+            for i, value in enumerate(config):
+                training_config[training_params[i]] = value
+            training_configs.append(training_config)
+
+        possible_configs = itertools.product(type_specific_configs, dense_configs, optim_configs, training_configs)
         config_count = 0
         for config in possible_configs:
             config_count += 1
             config_obj = {
                 'window_size': window_size,
+                'model': model_type,
                 'dense': config[1],
-                'optimizer': config[2]
+                'optimizer': config[2],
+                'training': config[3]
             }
             config_obj[model_type] = config[0]
             model_configs.append(config_obj)
     return model_configs
 
-def train_models(model_type, hyperparameter_configs):
+def train_models(model_type, hyperparameter_configs, data_list):
+    results = []
     for model_config in hyperparameter_configs:
         current_result = {}
         current_result['model_config'] = model_config
         current_result['left_validation_rmse'] = []
         current_result['right_validation_rmse'] = []
-        for trial in np.arange(1,11):
-            dataset = cnn_extract_features(data_list, model_config['window_size'], trial)
-            model = lstm_model(sequence_length=model_config['window_size'],
-                              n_features=10, 
-                               lstm_config=model_config['lstm'],
-                               dense_config=model_config['dense'],
-                               optim_config=model_config['optimizer'],
-                               X_train=dataset['X_train'].squeeze())
+        for test_trial in np.arange(1,3):
+            dataset = get_dataset(model_type, data_list, model_config['window_size'], test_trial)
+            model = create_model(model_config, dataset)
             model.summary()
             early_stopping_callback = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=0)
-            model_hist = model.fit(dataset['X_train'].squeeze(), dataset['y_train'].squeeze(), epochs=30, batch_size=128, verbose=1, validation_split=0.2, shuffle=True, callbacks= [early_stopping_callback])
-            # model.save('test_rnn_model')
+            model_hist = model.fit(dataset['X_train'], dataset['y_train'], verbose=1, validation_split=0.2, shuffle=True, callbacks= [early_stopping_callback], **model_config['training'])
 
-            predictions = model.predict(dataset['X_test'].squeeze())
-            left_rmse, right_rmse = custom_rmse(dataset['y_test'].squeeze(), predictions)
+            predictions = model.predict(dataset['X_test'])
+            left_rmse, right_rmse = custom_rmse(dataset['y_test'], predictions)
 
             current_result['left_validation_rmse'].append(left_rmse)
             current_result['right_validation_rmse'].append(right_rmse)
             clear_session()
         results.append(current_result)
         
+    for model in results:
+        model['left_rmse_mean'] = np.mean(model['left_validation_rmse'])
+        model['right_rmse_mean'] = np.mean(model['right_validation_rmse'])
+        
+    results_array = list(map(results_mapper, results))
+    df_results = pd.DataFrame(results_array)
+    return df_results
+
+def get_dataset(model_type, data_list, window_size, test_trial):
+    if model_type == 'cnn':
+        return cnn_extract_features(data_list, window_size, test_trial)
+    elif model_type == 'lstm':
+        dataset = cnn_extract_features(data_list, window_size, test_trial)
+        dataset['X_train'] = dataset['X_train'].squeeze()
+        dataset['y_train'] = dataset['y_train'].squeeze()
+        dataset['X_test'] = dataset['X_test'].squeeze()
+        dataset['y_test'] = dataset['y_test'].squeeze()
+        return dataset
+        
+    else:
+        raise Exception('No dataset for model type')
+        
+def create_model(model_config, dataset):
+    if (model_config['model'] == 'lstm'):
+        return lstm_model(sequence_length=model_config['window_size'],
+                          n_features=10, 
+                           lstm_config=model_config['lstm'],
+                           dense_config=model_config['dense'],
+                           optim_config=model_config['optimizer'],
+                           X_train=dataset['X_train'].squeeze())
+    elif (model_config['model'] == 'cnn'):
+        return cnn_model(model_config['window_size'],
+                         optim_config=model_config['optimizer'],
+                         X_train= dataset['X_train'])
+    else:
+        raise Exception('No model generator for model type')
+        
+def lstm_model(sequence_length, n_features, lstm_config, dense_config, optim_config, X_train):
+    model = Sequential()
+    norm_layer = Normalization(input_shape=(sequence_length, n_features))
+    norm_layer.adapt(X_train)
+    model.add(norm_layer)
+    model.add(LSTM(return_sequences = False, **lstm_config))
+    model.add(Dense(4, **dense_config))
+    model.compile(**optim_config)
+    return model
+
+def cnn_model(window_size, optim_config, X_train):
+    conv_kernel = 10
+    model = Sequential()
+    norm_layer = Normalization(input_shape=(window_size, 10))
+    norm_layer.adapt(X_train)
+    model.add(norm_layer)
+    model.add(Conv1D(10, conv_kernel, input_shape=(window_size, 10), kernel_regularizer='l2'))
+    model.add(Conv1D(10, (int)(window_size - conv_kernel + 1), kernel_regularizer='l2'))
+    model.add(Activation('relu'))
+    model.add(Flatten())
+    model.add(Dense(4, activation='tanh', kernel_regularizer='l2'))
+    model.compile(**optim_config)
+    return model
+
+def custom_rmse(y_true, y_pred):
+    #Raw values and Prediction are in X,Y
+    labels, theta, gp = {}, {}, {}
+
+    #Separate legs
+    left_true = y_true[:, :2]
+    right_true = y_true[:, 2:]
+    left_pred = y_pred[:, :2]
+    right_pred = y_pred[:, 2:]
+    
+    #Calculate cosine distance
+    left_num = np.sum(np.multiply(left_true, left_pred), axis=1)
+    left_denom = np.linalg.norm(left_true, axis=1) * np.linalg.norm(left_pred, axis=1)
+    right_num = np.sum(np.multiply(right_true, right_pred), axis=1)
+    right_denom = np.linalg.norm(right_true, axis=1) * np.linalg.norm(right_pred, axis=1)
+
+    left_cos = left_num / left_denom
+    right_cos = right_num / right_denom
+    
+    #Clip large values and small values
+    left_cos = np.minimum(left_cos, np.zeros(left_cos.shape)+1)
+    left_cos = np.maximum(left_cos, np.zeros(left_cos.shape)-1)
+    
+    right_cos = np.minimum(right_cos, np.zeros(right_cos.shape)+1)
+    right_cos = np.maximum(right_cos, np.zeros(right_cos.shape)-1)
+    
+    #Get theta error
+    left_theta = np.arccos(left_cos)
+    right_theta = np.arccos(right_cos)
+    
+    #Get gait phase error
+    left_gp_error = left_theta * 100 / (2*np.pi)
+    right_gp_error = right_theta * 100 / (2*np.pi)
+    
+    #Get rmse
+    left_rmse = np.sqrt(np.mean(np.square(left_gp_error)))
+    right_rmse = np.sqrt(np.mean(np.square(right_gp_error)))
+
+    #Separate legs
+    labels['left_true'] = left_true
+    labels['right_true'] = right_true
+    labels['left_pred'] = left_pred
+    labels['right_pred'] = right_pred
+
+    for key, value in labels.items(): 
+        #Convert to polar
+        theta[key] = np.arctan2(value[:, 1], value[:, 0])
+        
+        #Bring into range of 0 to 2pi
+        theta[key] = np.mod(theta[key] + 2*np.pi, 2*np.pi)
+
+        #Interpolate from 0 to 100%
+        gp[key] = 100*theta[key] / (2*np.pi)
+
+    return left_rmse, right_rmse
+
+def results_mapper(x):
+    out = {}
+    out['window_size'] = x['model_config']['window_size']
+    for key in x['model_config']['lstm'].keys():
+        out['lstm_{}'.format(key)] = x['model_config']['lstm'][key]
+
+    for key in x['model_config']['dense'].keys():
+        out['dense_{}'.format(key)] = x['model_config']['dense'][key]
+
+    for key in x['model_config']['optimizer'].keys():
+        out['optim_{}'.format(key)] = x['model_config']['optimizer'][key]
+        
+    for key in x['model_config']['training'].keys():
+        out['training_{}'.format(key)] = x['model_config']['training'][key]
+
+    out['left_rmse_mean'] = x['left_rmse_mean']
+    out['right_rmse_mean'] = x['right_rmse_mean']
+    return out
