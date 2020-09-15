@@ -1,0 +1,3 @@
+,window_size,lstm_units,lstm_activation,lstm_recurrent_regularizer,lstm_kernel_regularizer,dense_activation,dense_kernel_regularizer,optim_loss,optim_optimizer,left_rmse_mean,right_rmse_mean
+0,80,10,relu,L2,L2,tanh,L2,mean_absolute_error,adam,2.2311868454366124,2.41241419651556
+1,100,10,relu,L2,L2,tanh,L2,mean_absolute_error,adam,7.374007826155801,7.443651839566653

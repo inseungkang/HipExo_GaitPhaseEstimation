@@ -1,6 +1,7 @@
 from data_processing import *
 from convolutional_nn import *
-from keras.optimizers import Adam
+from lstm_modules import *
+from tensorflow.keras.optimizers import Adam
 
 sensors = ['leftJointPosition', 'rightJointPosition', 'leftJointVelocity',
            'rightJointVelocity', 'imuGyroX', 'imuGyroY', 'imuGyroZ', 'imuAccX',
@@ -10,16 +11,17 @@ sensors = ['leftJointPosition', 'rightJointPosition', 'leftJointVelocity',
 data = import_data(sensors)
 
 left_joint_positions, right_joint_positions = extract_joint_positions(data)
+
+labels = []
 for i in range(5):
     filename = "labels/label_trial{}.txt".format(i+1)
     left_x, left_y = label_vectors(left_joint_positions[i])
     right_x, right_y = label_vectors(right_joint_positions[i])
     label_df = pd.DataFrame({'leftGaitPhaseX': left_x, 'leftGaitPhaseY': left_y,
                              'rightGaitPhaseX': right_x, 'rightGaitPhaseY': right_y})
-    label_df.to_csv(filename, index=False)
+    labels.append(label_df)
 
 # Combine the data and the labels
-labels = import_labels()
 for d, l in zip(data, labels):
     d[l.columns] = l
 
@@ -31,10 +33,9 @@ for i in range(5):
 
 # Cut the standing data and store files into ../features folder
 data_list = cnn_cut_data(data, cut_indicies_list)
-# cnn_extract_images(data_list, [20, 40, 60, 80, 100, 120])
-cnn_extract_images(data_list, [20])
 
 ###################### Training Neural Network ##################
-# train_cnn([20, 40, 60, 80, 100, 120], [2], [2], [Adam()])
-train_cnn([20], [2], [2], [Adam()])
+window_sizes = np.arange(20, 221, 20)
 
+train_cnn(data_list, window_sizes, [Adam()])
+plot_err(window_sizes * 5)

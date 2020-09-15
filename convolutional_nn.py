@@ -1,7 +1,14 @@
 import numpy as np
-from keras.models import Sequential
-from keras.layers import Dense, Conv2D, Flatten, MaxPooling2D
+import matplotlib.pyplot as plt
+from tensorflow.keras.backend import clear_session
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Conv1D, Flatten, Activation, LSTM
+from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, TensorBoard
+from keras.metrics import RootMeanSquaredError
+from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
+from data_processing import cnn_extract_features
+from tensorflow.keras.layers.experimental.preprocessing import Normalization 
 
 trials = np.arange(1, 11)
 
@@ -29,57 +36,183 @@ def cnn_train_test_split(test_trial_num, window_size):
             'X_test': X_test, 'y_test': y_test}
     return data
 
-def cnn_create_model(winsize):
-    # create model
-    model = Sequential()
-    
-    # add model layers
-    model.add(Conv2D(64, input_shape=(winsize, 10, 1), kernel_size=(3,3), activation='relu'))
-    model.add(Flatten())
-    model.add(Dense(4))
 
+def preprocess_data(X_train, X_test):
+    # Feature Scaling
+    scaler = StandardScaler()
+    X_train, X_test = scaler.fit_transform(
+        X_train), scaler.fit_transform(X_test)
+    return X_train, X_test
+
+def cnn_create_model(winsize, X_train):
+    # create model
+    conv_kernel = 10
+    model = Sequential()
+    norm_layer = Normalization(input_shape=(winsize, 10))
+    norm_layer.adapt(X_train)
+    model.add(norm_layer)
+    model.add(Conv1D(10, conv_kernel, input_shape=(winsize, 10), kernel_regularizer='l2'))
+    model.add(Conv1D(10, (int)(winsize - conv_kernel + 1), kernel_regularizer='l2'))
+    model.add(Activation('relu'))
+    model.add(Flatten())
+    model.add(Dense(4, activation='tanh', kernel_regularizer='l2'))
     return model
 
-def train_cnn(window_sizes, num_layers, num_nodes, optimizers):
+def train_cnn(data_list, window_sizes, optimizers):
     '''
     Params: lists
     Returns: list of errors for each combination of params
     Stores the predictions for each parameter and each trial, as well as an
     error file to the ../predictions folder
     '''
-    errors = []
+    errors = np.array([])
     for window_size in window_sizes:
-        for num_layer in num_layers:
-            for num_node in num_nodes:
-                model = cnn_create_model(window_size)
-                print(model.summary())
-                for ix, optimizer in enumerate(optimizers):
-                    model.compile(loss='mae', optimizer=optimizer)
-                    loss_per_trial = []
-                    for test_trial_num in trials:
-                        data = cnn_train_test_split(test_trial_num, window_size)
-                        model.fit(x=data['X_train'], y=data['y_train'],
-                                  epochs=1, batch_size=128, verbose=0)
-#                         loss_per_trial.append(model.evaluate(
-#                                 data['X_test'], data['y_test']))
-#                         y_preds = model.predict(data['X_test'])
-                        # writes the predictions to a file in predictions file
-                        # file_name = f'predictions/{mode}_wsize{window_size}_{num_layer}layers_{num_node}nodes_optimizer{ix+1}_trial{test_trial_num}.txt'
-                        # y_preds.to_csv(file_name, index=False)
-                    for test_trial_num in trials:
-                        data = cnn_train_test_split(test_trial_num, window_size)
-                        loss_per_trial.append(model.evaluate(
-                                data['X_test'], data['y_test']))
-                        y_preds = model.predict(data['X_test'])
-                    loss_mean = np.mean(loss_per_trial) * 100
-                    errors.append(loss_mean)
-                    print('Window Size: {} \nAccuracy: {:.2f}%'.format(
-                        window_size, loss_mean))
-                model.save('test_model_save')
-#     errs = errors.to_numpy()
-#     np.save('predictions/err.txt', errs)
-#     return errs
-    return
+        for optimizer in optimizers:
+            loss_per_trial = np.array([])
+            for test_trial_num in trials[:10]:
+                data = cnn_extract_features(data_list, window_size, test_trial_num)
+                model = cnn_create_model(window_size, data['X_train'])
+                model.compile(loss='mae', optimizer=optimizer,
+                                metrics=RootMeanSquaredError())
+                # early stopping
+                early_stopping_callback = EarlyStopping(
+                    monitor='val_loss', 
+                    min_delta=0, 
+                    patience=10, 
+                    verbose=0)
+                
+                tensorboard_callback = TensorBoard(log_dir='./vis',
+                                                profile_batch=0, histogram_freq=1)
+
+                history = model.fit(data['X_train'], data['y_train'], epochs=100, batch_size=128, verbose=0, validation_data=(data['X_test'], data['y_test']), shuffle=True, callbacks= [early_stopping_callback, tensorboard_callback])
+                plot_learning_curve(
+                    history, test_trial_num, window_size)
+                plt.show()
+                y_preds = model.predict(data['X_test'])
+                
+                gp_x = y_preds[:,0]
+                gp_y = y_preds[:,1]
+                theta = np.arctan2(gp_y, gp_x)
+        
+                #Bring into range of 0 to 2pi
+                theta = np.mod(theta + 2*np.pi, 2*np.pi)
+
+                #Interpolate from 0 to 100%
+                gp = 100*theta / (2*np.pi)
+                
+                gp_x_2 = data['y_test'][:,0]
+                gp_y_2 = data['y_test'][:,1]
+                theta_2 = np.arctan2(gp_y_2, gp_x_2)
+        
+                #Bring into range of 0 to 2pi
+                theta_2 = np.mod(theta_2 + 2*np.pi, 2*np.pi)
+
+                #Interpolate from 0 to 100%
+                gp_2 = 100*theta_2 / (2*np.pi)
+                
+                left_rmse, right_rmse = custom_rmse(data['y_test'], y_preds)
+                loss_per_trial = np.append(loss_per_trial, np.mean((left_rmse, right_rmse)))
+                clear_session()
+            print(f'Loss in each trial: {loss_per_trial}')
+            loss_mean = np.mean(loss_per_trial)
+            errors = np.append(errors, loss_mean)
+            print('Window Size: {} | RMSE: {:.2f}%'.format(
+                window_size, loss_mean))
+        # model.save('test_model_save_2')
+    np.savetxt('err.txt', errors)
+
+def custom_rmse(y_true, y_pred):
+    #Raw values and Prediction are in X,Y
+    labels, theta, gp = {}, {}, {}
+
+    #Separate legs
+    left_true = y_true[:, :2]
+    right_true = y_true[:, 2:]
+    left_pred = y_pred[:, :2]
+    right_pred = y_pred[:, 2:]
     
+    #Calculate cosine distance
+    left_num = np.sum(np.multiply(left_true, left_pred), axis=1)
+    left_denom = np.linalg.norm(left_true, axis=1) * np.linalg.norm(left_pred, axis=1)
+    right_num = np.sum(np.multiply(right_true, right_pred), axis=1)
+    right_denom = np.linalg.norm(right_true, axis=1) * np.linalg.norm(right_pred, axis=1)
+
+    left_cos = left_num / left_denom
+    right_cos = right_num / right_denom
+    
+    #Clip large values and small values
+    left_cos = np.minimum(left_cos, np.zeros(left_cos.shape)+1)
+    left_cos = np.maximum(left_cos, np.zeros(left_cos.shape)-1)
+    
+    right_cos = np.minimum(right_cos, np.zeros(right_cos.shape)+1)
+    right_cos = np.maximum(right_cos, np.zeros(right_cos.shape)-1)
+    
+    #Get theta error
+    left_theta = np.arccos(left_cos)
+    right_theta = np.arccos(right_cos)
+    
+    #Get gait phase error
+    left_gp_error = left_theta * 100 / (2*np.pi)
+    right_gp_error = right_theta * 100 / (2*np.pi)
+    
+    #Get rmse
+    left_rmse = np.sqrt(np.mean(np.square(left_gp_error)))
+    right_rmse = np.sqrt(np.mean(np.square(right_gp_error)))
+
+    #Separate legs
+    labels['left_true'] = left_true
+    labels['right_true'] = right_true
+    labels['left_pred'] = left_pred
+    labels['right_pred'] = right_pred
+
+    for key, value in labels.items(): 
+        #Convert to polar
+        theta[key] = np.arctan2(value[:, 1], value[:, 0])
+        
+        #Bring into range of 0 to 2pi
+        theta[key] = np.mod(theta[key] + 2*np.pi, 2*np.pi)
+
+        #Interpolate from 0 to 100%
+        gp[key] = 100*theta[key] / (2*np.pi)
+
+    return left_rmse, right_rmse
 
 
+def plot_err(param):
+    # Plot err against the parameter
+    errors = np.loadtxt('err.txt')
+    plt.plot(param, errors)
+    plt.xticks(param)
+    plt.xlabel('window size (ms)')
+    plt.ylabel('rmse (%)')
+
+    # zip joins x and y coordinates in pairs
+    for x, y in zip(param, errors):
+
+        label = "{:.2f}".format(y)
+
+        plt.annotate(label,  # this is the text
+            (x, y),  # this is the point to label
+            textcoords="offset points",  # how to position the text
+            xytext=(0, -10),  # distance from text to points (x,y)
+            ha='center')  # horizontal alignment can be left, right or center
+    plt.title('Convolutional Neural Network')
+    plt.grid()
+    plt.show()
+
+def plot_gait_phase(gp_true, gp_pred):
+    plt.plot(gp_true)
+    plt.plot(gp_pred)
+    plt.title('CNN Gait Phase')
+    plt.ylabel('Gait Phase (%)')
+    plt.legend(['True', 'Pred'])
+
+def plot_learning_curve(history, trial, winsize):
+    plt.plot(history.history['root_mean_squared_error'],
+             label='RMSE (training data)')
+    plt.plot(history.history['val_root_mean_squared_error'],
+            label='RMSE (validation data)')
+    plt.title(f'RMSE for trial {trial} window size {winsize}')
+    plt.ylabel('RMSE value')
+    plt.xlabel('No. epoch')
+    plt.legend(loc="upper left")
