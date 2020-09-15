@@ -6,7 +6,7 @@ from tensorflow.keras.layers import Dense, Conv1D, Activation, Flatten, LSTM
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
 from tensorflow.keras.initializers import GlorotUniform
 from tensorflow.keras.layers.experimental.preprocessing import Normalization
-from clean_data_processing import *
+from data_processing import *
 
 def get_model_configs(hyperparam_space):
     model_configs = []
