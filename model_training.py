@@ -119,7 +119,7 @@ def train_models(model_type, hyperparameter_configs, data_list):
         current_result['model_config'] = model_config
         current_result['left_validation_rmse'] = []
         current_result['right_validation_rmse'] = []
-        for test_trial in np.arange(1,11):
+        for test_trial in np.arange(1,2):
             dataset = get_dataset(model_type, data_list, model_config['window_size'], test_trial)
             print(dataset['X_train'].shape)
             model = create_model(model_config, dataset)
@@ -139,7 +139,7 @@ def train_models(model_type, hyperparameter_configs, data_list):
     for trial in results:
         left_val_rmse = trial['left_validation_rmse']
         right_val_rmse = trial['right_validation_rmse']
-        for i in np.arange(10):
+        for i in np.arange(1):
             trial_result = {}
             trial_result['trial'] = i
             trial_result['window_size'] = trial['model_config']['window_size']
@@ -293,6 +293,10 @@ def custom_rmse(y_true, y_pred):
     
     right_cos = np.minimum(right_cos, np.zeros(right_cos.shape)+1)
     right_cos = np.maximum(right_cos, np.zeros(right_cos.shape)-1)
+    
+    # What if denominator is zero (model predicts 0 for both X and Y)
+    left_cos[np.isnan(left_cos)] = 0
+    right_cos[np.isnan(right_cos)] = 0
     
     #Get theta error
     left_theta = np.arccos(left_cos)
