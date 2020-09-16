@@ -99,9 +99,9 @@ def get_model_configs(hyperparam_space):
                 config_obj = {
                     'window_size': window_size,
                     'model': model_type,
-                    'dense': config[1],
-                    'optimizer': config[2],
-                    'training': config[3]
+                    'dense': config[0],
+                    'optimizer': config[1],
+                    'training': config[2]
                 }
                 model_configs.append(config_obj)
 
@@ -121,6 +121,7 @@ def train_models(model_type, hyperparameter_configs, data_list):
         current_result['right_validation_rmse'] = []
         for test_trial in np.arange(1,3):
             dataset = get_dataset(model_type, data_list, model_config['window_size'], test_trial)
+            print(dataset['X_train'].shape)
             model = create_model(model_config, dataset)
             model.summary()
             early_stopping_callback = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=0)
@@ -181,7 +182,7 @@ def get_dataset(model_type, data_list, window_size, test_trial):
         dataset['y_test'] = dataset['y_test'].squeeze()
         return dataset
     elif model_type == 'mlp':
-        return None
+        return nn_extract_features(data_list, window_size, test_trial)
     else:
         raise Exception('No dataset for model type')
 
@@ -202,8 +203,7 @@ def create_model(model_config, dataset):
                          optim_config=model_config['optimizer'],
                          X_train=dataset['X_train'])
     elif (model_config['model'] == 'mlp'):
-        return mlp_model(window_size=model_config['window_size'],
-                         n_features=10,
+        return mlp_model(n_features=50,
                          dense_config=model_config['dense'],
                          optim_config=model_config['optimizer'],
                          X_train=dataset['X_train'])
@@ -255,9 +255,9 @@ def cnn_model(window_size, n_features, cnn_config, dense_config, optim_config, X
     return model
 
 # Creates an MLP model based on the specified configuration
-def mlp_model(window_size, n_features, dense_config, optim_config, X_train):
+def mlp_model(n_features, dense_config, optim_config, X_train):
     model = Sequential()
-    norm_layer = Normalization(input_shape=(window_size, n_features))
+    norm_layer = Normalization(input_shape=(n_features,))
     norm_layer.adapt(X_train)
     model.add(norm_layer)
     for x in range(dense_config['num_layers']):
@@ -331,8 +331,9 @@ def results_mapper(x):
     out['window_size'] = x['model_config']['window_size']
     model_type = x['model_config']['model']
     out['model_type'] = model_type
-    for key in x['model_config'][model_type].keys():
-        out['{}_{}'.format(model_type, key)] = x['model_config'][model_type][key]
+    if model_type != 'mlp':
+        for key in x['model_config'][model_type].keys():
+            out['{}_{}'.format(model_type, key)] = x['model_config'][model_type][key]
 
     for key in x['model_config']['dense'].keys():
         out['dense_{}'.format(key)] = x['model_config']['dense'][key]
