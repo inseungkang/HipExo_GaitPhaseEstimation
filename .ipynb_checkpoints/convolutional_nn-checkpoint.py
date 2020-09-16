@@ -8,6 +8,7 @@ from keras.metrics import RootMeanSquaredError
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from data_processing import cnn_extract_features
+from tensorflow.keras.layers.experimental.preprocessing import Normalization 
 
 trials = np.arange(1, 11)
 
@@ -43,17 +44,19 @@ def preprocess_data(X_train, X_test):
         X_train), scaler.fit_transform(X_test)
     return X_train, X_test
 
-def cnn_create_model(winsize):
+def cnn_create_model(winsize, X_train):
     # create model
     conv_kernel = 10
-    model_dep = Sequential()
-    model_dep.add(Conv1D(10, conv_kernel, input_shape=(winsize, 10)))
-    model_dep.add(Conv1D(10, winsize - conv_kernel + 1))
-    model_dep.add(Activation('relu'))
-    model_dep.add(Flatten())
-    model_dep.add(Dense(4, activation='tanh'))
-    model_dep.compile(loss='mean_squared_error', optimizer='adam')
-    return model_dep
+    model = Sequential()
+    norm_layer = Normalization(input_shape=(winsize, 10))
+    norm_layer.adapt(X_train)
+    model.add(norm_layer)
+    model.add(Conv1D(10, conv_kernel, input_shape=(winsize, 10), kernel_regularizer='l2'))
+    model.add(Conv1D(10, (int)(winsize - conv_kernel + 1), kernel_regularizer='l2'))
+    model.add(Activation('relu'))
+    model.add(Flatten())
+    model.add(Dense(4, activation='tanh', kernel_regularizer='l2'))
+    return model
 
 def train_cnn(data_list, window_sizes, optimizers):
     '''
@@ -64,13 +67,13 @@ def train_cnn(data_list, window_sizes, optimizers):
     '''
     errors = np.array([])
     for window_size in window_sizes:
-        for ix, optimizer in enumerate(optimizers):
+        for optimizer in optimizers:
             loss_per_trial = np.array([])
-            for test_trial_num in trials[:2]:
-                model = cnn_create_model(window_size)
+            for test_trial_num in trials[:10]:
                 data = cnn_extract_features(data_list, window_size, test_trial_num)
-#                 model.compile(loss='mse', optimizer=optimizer,
-#                                 metrics=RootMeanSquaredError())
+                model = cnn_create_model(window_size, data['X_train'])
+                model.compile(loss='mae', optimizer=optimizer,
+                                metrics=RootMeanSquaredError())
                 # early stopping
                 early_stopping_callback = EarlyStopping(
                     monitor='val_loss', 
@@ -81,39 +84,11 @@ def train_cnn(data_list, window_sizes, optimizers):
                 tensorboard_callback = TensorBoard(log_dir='./vis',
                                                 profile_batch=0, histogram_freq=1)
 
-                history = model.fit(data['X_train'], data['y_train'], epochs=20, batch_size=128, verbose=0, validation_data=(data['X_test'], data['y_test']), shuffle=True, callbacks= [early_stopping_callback, tensorboard_callback])
-#                               plot_learning_curve(
-#                     history, test_trial_num, window_size)
-#                 plt.show()
+                history = model.fit(data['X_train'], data['y_train'], epochs=100, batch_size=128, verbose=0, validation_data=(data['X_test'], data['y_test']), shuffle=True, callbacks= [early_stopping_callback, tensorboard_callback])
+                plot_learning_curve(
+                    history, test_trial_num, window_size)
+                plt.show()
                 y_preds = model.predict(data['X_test'])
-                
-                gp_x = y_preds[:,0]
-                gp_y = y_preds[:,1]
-                theta = np.arctan2(gp_y, gp_x)
-        
-                #Bring into range of 0 to 2pi
-                theta = np.mod(theta + 2*np.pi, 2*np.pi)
-
-                #Interpolate from 0 to 100%
-                gp = 100*theta / (2*np.pi)
-                
-                plt.figure()
-                plt.plot(gp[:1000])
-                plt.show()
-                
-                gp_x_2 = data['y_test'][:,0]
-                gp_y_2 = data['y_test'][:,1]
-                theta_2 = np.arctan2(gp_y_2, gp_x_2)
-        
-                #Bring into range of 0 to 2pi
-                theta_2 = np.mod(theta_2 + 2*np.pi, 2*np.pi)
-
-                #Interpolate from 0 to 100%
-                gp_2 = 100*theta_2 / (2*np.pi)
-                
-                plt.figure()
-                plt.plot(gp_2[:1000])
-                plt.show()
                 
                 left_rmse, right_rmse = custom_rmse(data['y_test'], y_preds)
                 loss_per_trial = np.append(loss_per_trial, np.mean((left_rmse, right_rmse)))
@@ -181,8 +156,6 @@ def custom_rmse(y_true, y_pred):
         gp[key] = 100*theta[key] / (2*np.pi)
 
     return left_rmse, right_rmse
-
-
 
 
 def plot_err(param):

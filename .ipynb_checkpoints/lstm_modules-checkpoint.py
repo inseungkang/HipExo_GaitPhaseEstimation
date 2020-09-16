@@ -5,14 +5,14 @@ from tensorflow.keras.layers import Dense, Flatten, LSTM
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, TensorBoard
 from tensorflow.keras.layers.experimental.preprocessing import Normalization 
 
-def lstm_model(sequence_length, n_features, lstm_config, dense_config, optim_config, X_train):
+def lstm_model(sequence_length, n_features, X_train):
     model = Sequential()
     norm_layer = Normalization(input_shape=(sequence_length, n_features))
     norm_layer.adapt(X_train)
     model.add(norm_layer)
-    model.add(LSTM(return_sequences = False, **lstm_config))
-    model.add(Dense(4, **dense_config))
-    model.compile(**optim_config)
+    model.add(LSTM(30, return_sequences = False, activation='relu'))
+    model.add(Dense(4, activation='tanh'))
+    model.compile(loss='mean_squared_error', optimizer='rmsprop')
     return model
 
 def train_rnn():
