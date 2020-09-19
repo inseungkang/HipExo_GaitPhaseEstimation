@@ -1,25 +1,99 @@
 import math
+import glob
+import re
 import pandas as pd
 import numpy as np
 import scipy
+import matplotlib.pyplot as plt
 from scipy.signal import find_peaks, peak_prominences, peak_widths
 import warnings
 warnings.filterwarnings("ignore")
 
-sensors = ['leftJointPosition', 'rightJointPosition', 'leftJointVelocity',
-           'rightJointVelocity', 'imuGyroX', 'imuGyroY', 'imuGyroZ', 'imuAccX',
-           'imuAccY', 'imuAccZ']
+columns = ['lJPos', 'rJPos', 'lJVel', 'rJVel', 'lJTorque', 'rJTorque',
+           'eulerX', 'eulerY', 'eulerZ', 'gyroX', 'gyroY', 'gyroZ', 'accX', 'accY', 'accZ',
+           'batt', 'cpu', 'mem', 'lBttn', 'rBttn', 'time', 'lJVelFilt', 'rJVelFilt',
+           'lJPosReset', 'rJPosReset', 'lGC', 'rGC', 'stand', 'lCmdTorque', 'rCmdTorque',
+           'lRecvTorque', 'rRecvTorque', 'lStanceSwing', 'rStanceSwing', 'nWalk', 'lWalk', 'rWalk', 'none']
+sensors = ['lJPos', 'rJPos', 'lJVel',
+           'rJVel', 'gyroX', 'gyroY', 'gyroZ', 'accX',
+           'accY', 'accZ']
+
+def segment_data():
+    """load and segment out data from each circuit and cutting out standing data
+    """
+    for subject in range(3, 4):
+        for file_path in glob.glob(f'data/AB{subject:02d}*.txt'):
+            data = pd.read_csv(file_path, sep=" ", header=None)
+            data.columns = columns
+            lJPos, rJPos = extract_joint_positions([data])
+            stand = find_standing_phase(lJPos[0])
+            stand = np.append(stand, len(lJPos[0]) - 1)
+            diff = np.abs(np.diff(stand))
+            diff_ix = [i for i, v in enumerate(diff) if v > 3000]
+            cut_ix = []
+            for i in diff_ix:
+                cut_ix.append(stand[i])
+                cut_ix.append(stand[i+1])
+            data_cut = []
+            for i in range(math.floor((len(cut_ix)/2))):
+                segment = data.iloc[cut_ix[i*2]
+                    :cut_ix[(i*2)+1]+1]
+                data_cut.append(segment)
+                
+            for i, segment in enumerate(data_cut):
+                save_file_path = file_path[:9] + '/' + file_path[10:-4] + f'_{i+1}'
+                # print(save_file_path)
+                # np.save(save_file_path, segment)
+            # print(len(data_cut))
+            # print(file_path)
+            # print(len(data_cut))
+    #         print(stand)
+    #         print(diff)
+    #         print(cut_ix)
+    #         print("")
+            # plt.figure()
+            # plt.plot(lJPos[0])
+            # plt.plot(rJPos[0], 'r')
+            # plt.vlines(cut_ix[-10:], -1, 1)
+            # plt.title(file_path)
+    # plt.show()
+
+
+def find_standing_phase(data):
+    ''' 
+    Input: 1D array of joint position data
+    Output: 1D array of indices representing the standing phase segments in the
+    format of [start, end, start, ... end]
+    '''
+
+    diff = np.abs(np.diff(data))
+    threshold = 0.008
+    diff[diff <= threshold], diff[diff > threshold] = 0, 1
+
+    # use string pattern matching to find the start and end indices of the
+    # standing phases
+    diff_str = ''.join(str(x) for x in diff.astype(int))
+    begin = [m.start() for m in re.finditer(r'10{205}', diff_str)]
+    end = [m.end() for m in re.finditer(r'0{205}1', diff_str)]
+
+    if (np.min(end) < np.min(begin)):
+        begin.append(0)
+    if (np.max(end) < np.max(begin)):
+        end.append(len(data))
+
+    standing_indices = np.sort(np.hstack([begin, end]))
+    return standing_indices
 
 
 def import_data():
     """imports all 5 trials of data, take only the columns corresponds to 
     sensors in the sensors list. Format them into dataframe and put them in a
     list.
-
+    
     Returns:
         list[Dataframes]: 5 trials of data of shape (M, 10)
     """
-    
+
     # Read data
     columns = pd.read_csv('data/columns.txt', header=None)
     data1 = pd.read_csv('data/trial_1.txt', sep=" ", header=None)
@@ -111,8 +185,8 @@ def extract_joint_positions(data_all):
     left_joint_positions, right_joint_positions = [], []
     for data in data_all:
         # create joing position lists
-        left_joint_positions.append(data['leftJointPosition'])
-        right_joint_positions.append(data['rightJointPosition'])
+        left_joint_positions.append(data['lJPos'])
+        right_joint_positions.append(data['rJPos'])
     return left_joint_positions, right_joint_positions
 
 
@@ -142,7 +216,6 @@ def find_local_maximas(joint_positions):
     maximas, _ = find_peaks(joint_positions, prominence=np.median(prominences)+np.var(prominences), 
                             height=np.mean(joint_positions), distance=100,
                             wlen=np.mean(width)+4*np.std(width))
-
     return maximas
 
 
@@ -193,7 +266,6 @@ def find_cutting_indices(left_data, right_data):
     for i in range(maximas.shape[0]-1):
         diff.append(maximas[i+1]-maximas[i])
     diff.append(0)
-
     cuts = maximas[diff > (2*np.std(diff)+np.mean(diff))]
     # Starting from peak 2
     peaks_ix = [maximas[1]]
