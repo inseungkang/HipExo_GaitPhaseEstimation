@@ -84,7 +84,7 @@ def find_standing_phase(data):
     return standing_indices
 
 
-def import_data():
+def import_data(subject, mode):
     """imports all 5 trials of data, take only the columns corresponds to 
     sensors in the sensors list. Format them into dataframe and put them in a
     list.
@@ -92,28 +92,25 @@ def import_data():
     Returns:
         list[Dataframes]: 5 trials of data of shape (M, 10)
     """
-
-    # Read data
-    columns = pd.read_csv('data/columns.txt', header=None)
-    data1 = pd.read_csv('data/trial_1.txt', sep=" ", header=None)
-    data2 = pd.read_csv('data/trial_2.txt', sep=" ", header=None)
-    data3 = pd.read_csv('data/trial_3.txt', sep=" ", header=None)
-    data4 = pd.read_csv('data/trial_4.txt', sep=" ", header=None)
-    data5 = pd.read_csv('data/trial_5.txt', sep=" ", header=None)
-
-    # Format data
-    data_all = [data1, data2, data3, data4, data5]
-    columns_list = columns.transpose().values.tolist()[0]
+    file_path = f'data/AB{subject:02d}/' + mode + '*'
+    
     data_list = []
-    for data in data_all:
+    # Read data
+    for file in sorted(glob.glob(file_path)):
+        data = np.load(file)
+        data = pd.DataFrame(data, columns=columns)
+
         # drop the 32nd column which only contains NaN values
         data.dropna(axis=1, inplace=True)
-        # rename the columns
-        data.columns = columns_list
         # only keep the 10 sensors data columns
-        data = data[sensors]
+        # data = data[sensors]
         data_list.append(data)
-
+        lJPos, rJPos = extract_joint_positions([data])
+        lMaximas = find_local_maximas(lJPos[0])
+    #     plt.figure()
+    #     plt.plot(lJPos[0])
+    #     plt.plot(lMaximas, [lJPos[0][i] for i in lMaximas], 'r*')
+    # plt.show()
     return data_list
 
 
@@ -200,7 +197,7 @@ def find_local_maximas(joint_positions):
     """
     # Peak detection using scipy.signal.find_peaks()
 
-    joint_positions = joint_positions.rolling(10).mean()  # smooth out the joint positions
+    # joint_positions = joint_positions.rolling(10).mean()  # smooth out the joint positions
     peaks, _ = find_peaks(joint_positions)  # find all extremas in the joint positions
 
     # find a list of prominences for all extremas
@@ -212,9 +209,13 @@ def find_local_maximas(joint_positions):
     #               height of peaks > mean(joint_positions)
     #               distance between peaks > 100 samples
     #               width of peak < mean + 4*std of width
-    maximas, _ = find_peaks(joint_positions, prominence=np.median(prominences)+np.var(prominences), 
-                            height=np.mean(joint_positions), distance=100,
-                            wlen=np.mean(width)+4*np.std(width))
+    # maximas, _ = find_peaks(joint_positions, prominence=np.median(prominences)+np.var(prominences), 
+    #                         height=np.mean(joint_positions), distance=100,
+    #                         wlen=np.mean(width)+4*np.std(width))
+    maximas, _ = find_peaks(joint_positions, prominence=np.median(prominences) 
+                            + np.var(prominences), distance=130,
+                            height=np.mean(joint_positions)-np.var(joint_positions), 
+                            wlen=np.mean(width)+6*np.std(width))
     return maximas
 
 
