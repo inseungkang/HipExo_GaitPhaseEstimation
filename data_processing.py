@@ -21,7 +21,7 @@ sensors = ['lJPos', 'rJPos', 'lJVel',
 def segment_data():
     """load and segment out data from each circuit and cutting out standing data
     """
-    for subject in range(3, 4):
+    for subject in range(10, 11):
         for file_path in glob.glob(f'data/AB{subject:02d}*.txt'):
             data = pd.read_csv(file_path, sep=" ", header=None)
             data.columns = columns
@@ -40,9 +40,8 @@ def segment_data():
                     :cut_ix[(i*2)+1]+1]
                 data_cut.append(segment)
                 
-            for i, segment in enumerate(data_cut):
+            for i, segment in enumerate(data_cut[-5:]):
                 save_file_path = file_path[:9] + '/' + file_path[10:-4] + f'_{i+1}'
-                # print(save_file_path)
                 # np.save(save_file_path, segment)
             # print(len(data_cut))
             # print(file_path)
@@ -51,12 +50,12 @@ def segment_data():
     #         print(diff)
     #         print(cut_ix)
     #         print("")
-            # plt.figure()
+            # plt.figure(figsize=(10, 5))
             # plt.plot(lJPos[0])
             # plt.plot(rJPos[0], 'r')
             # plt.vlines(cut_ix[-10:], -1, 1)
             # plt.title(file_path)
-    # plt.show()
+    plt.show()
 
 
 def find_standing_phase(data):
@@ -67,14 +66,14 @@ def find_standing_phase(data):
     '''
 
     diff = np.abs(np.diff(data))
-    threshold = 0.008
+    threshold = 0.0058
     diff[diff <= threshold], diff[diff > threshold] = 0, 1
 
     # use string pattern matching to find the start and end indices of the
     # standing phases
     diff_str = ''.join(str(x) for x in diff.astype(int))
-    begin = [m.start() for m in re.finditer(r'10{205}', diff_str)]
-    end = [m.end() for m in re.finditer(r'0{205}1', diff_str)]
+    begin = [m.start() for m in re.finditer(r'10{97}', diff_str)]
+    end = [m.end() for m in re.finditer(r'0{97}1', diff_str)]
 
     if (np.min(end) < np.min(begin)):
         begin.append(0)
