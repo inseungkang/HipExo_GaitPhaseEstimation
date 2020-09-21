@@ -1,7 +1,8 @@
 from data_processing import *
 from model_training import *
 
-data = import_data(3, 'CCW_BT_')
+# segment_data()
+manual_label_data(1)
 # data = label_data(data)
 # data = cut_data(data)
 # ###################### Training Neural Network ##################

@@ -16,13 +16,13 @@ columns = ['lJPos', 'rJPos', 'lJVel', 'rJVel', 'lJTorque', 'rJTorque',
            'lRecvTorque', 'rRecvTorque', 'lStanceSwing', 'rStanceSwing', 'nWalk', 'lWalk', 'rWalk', 'none']
 sensors = ['lJPos', 'rJPos', 'lJVel',
            'rJVel', 'gyroX', 'gyroY', 'gyroZ', 'accX',
-           'accY', 'accZ']
+           'accY', 'accZ', 'nWalk']
 
 def segment_data():
     """load and segment out data from each circuit and cutting out standing data
     """
     for subject in range(10, 11):
-        for file_path in glob.glob(f'data/AB{subject:02d}*.txt'):
+        for file_path in glob.glob(f'data/raw/AB{subject:02d}*.txt'):
             data = pd.read_csv(file_path, sep=" ", header=None)
             data.columns = columns
             lJPos, rJPos = extract_joint_positions([data])
@@ -50,11 +50,11 @@ def segment_data():
     #         print(diff)
     #         print(cut_ix)
     #         print("")
-            # plt.figure(figsize=(10, 5))
-            # plt.plot(lJPos[0])
-            # plt.plot(rJPos[0], 'r')
-            # plt.vlines(cut_ix[-10:], -1, 1)
-            # plt.title(file_path)
+            plt.figure(figsize=(10, 5))
+            plt.plot(lJPos[0])
+            plt.plot(rJPos[0], 'r')
+            plt.vlines(cut_ix[-10:], -1, 1)
+            plt.title(file_path)
     plt.show()
 
 
@@ -83,38 +83,7 @@ def find_standing_phase(data):
     standing_indices = np.sort(np.hstack([begin, end]))
     return standing_indices
 
-
-def import_data(subject, mode):
-    """imports all 5 trials of data, take only the columns corresponds to 
-    sensors in the sensors list. Format them into dataframe and put them in a
-    list.
-    
-    Returns:
-        list[Dataframes]: 5 trials of data of shape (M, 10)
-    """
-    file_path = f'data/AB{subject:02d}/' + mode + '*'
-    
-    data_list = []
-    # Read data
-    for file in sorted(glob.glob(file_path)):
-        data = np.load(file)
-        data = pd.DataFrame(data, columns=columns)
-
-        # drop the 32nd column which only contains NaN values
-        data.dropna(axis=1, inplace=True)
-        # only keep the 10 sensors data columns
-        # data = data[sensors]
-        data_list.append(data)
-        lJPos, rJPos = extract_joint_positions([data])
-        lMaximas = find_local_maximas(lJPos[0])
-    #     plt.figure()
-    #     plt.plot(lJPos[0])
-    #     plt.plot(lMaximas, [lJPos[0][i] for i in lMaximas], 'r*')
-    # plt.show()
-    return data_list
-
-
-def label_data(data):
+def manual_label_data(subject):
     """Label the data, and combine the data with the label columns
 
     Args:
@@ -123,22 +92,137 @@ def label_data(data):
     Returns:
         list[Dataframes]: 5 trials of data of shape (M, 14)
     """
+    def onclick(event):
+        print(event.xdata)
+        plt.close()
     
-    left_joint_positions, right_joint_positions = extract_joint_positions(data)
+    file_path = f'data/AB{subject:02d}/' + '*' + "ZI*.npy"
+    # Read data
+    for file in sorted(glob.glob(file_path)):
+        data = np.load(file)
+        data = pd.DataFrame(data, columns=columns)
 
-    labels = []
-    for i in range(5):
-        left_x, left_y = label_vectors(left_joint_positions[i])
-        right_x, right_y = label_vectors(right_joint_positions[i])
-        label_df = pd.DataFrame({'leftGaitPhaseX': left_x, 'leftGaitPhaseY': left_y,
-                                 'rightGaitPhaseX': right_x, 'rightGaitPhaseY': right_y})
-        labels.append(label_df)
+        # drop the 32nd column which only contains NaN values
+        data.dropna(axis=1, inplace=True)
+        # only keep the 10 sensors data columns + nWalk
+        data = data[sensors]
+        lJPos, rJPos = extract_joint_positions([data])
+        lMaximas, rMaximas = find_local_maximas(lJPos[0]), find_local_maximas(rJPos[0])
+         
+        f = plt.figure(figsize=(10, 4))
+        plt.title(file + ' Left')
+        plt.plot(lJPos[0])
+        plt.plot(lMaximas, [lJPos[0][i] for i in lMaximas], 'r*')
+        f.canvas.mpl_connect('button_press_event', onclick)
+        plt.show()
+        val = input("Press Enter if ok; \nType 'rm {int}' to remove a maxima; \nType 'add {int}' to add a maxima:\n")
+        while val:
+            plt.close()
+            val = val.split(' ')
+            if val[0] == 'rm': 
+                closest = min(lMaximas, key=lambda x : abs(x-int(val[1])))
+                lMaximas.remove(closest)
+            elif val[0] == 'add':
+                lMaximas.append(int(val[1]))
+                lMaximas.sort()
+            else: 
+                print("Invalid Input")
+                continue
+            f = plt.figure(figsize=(10, 4))
+            plt.title(file + ' Left')
+            plt.plot(lJPos[0])
+            plt.plot(lMaximas, [lJPos[0][i] for i in lMaximas], 'r*')
+            f.canvas.mpl_connect('button_press_event', onclick)
+            plt.show()
+            val = input("Press Enter if ok; \nType 'rm {int}' to remove a maxima; \nType 'add {int}' to add a maxima:\n")
+            continue
+        
+        f = plt.figure(figsize=(10, 4))
+        plt.title(file + ' Right')
+        plt.plot(rJPos[0])
+        plt.plot(rMaximas, [rJPos[0][i] for i in rMaximas], 'r*')
+        f.canvas.mpl_connect('button_press_event', onclick)
+        plt.show()
+        val = input("Press Enter if ok; \nType 'rm {int}' to remove a maxima; \nType 'add {int}' to add a maxima:\n")
+        while val:
+            plt.close()
+            val = val.split(' ')
+            if val[0] == 'rm': 
+                closest = min(rMaximas, key=lambda x : abs(x-int(val[1])))
+                rMaximas.remove(closest)
+                print(f"Removed point {closest}")
+            elif val[0] == 'add':
+                rMaximas.append(int(val[1]))
+                rMaximas.sort()
+                print(f"Added point " + val[1])
+            else: 
+                print("Invalid Input")
+                continue
+            f = plt.figure(figsize=(10, 4))
+            plt.title(file + ' Right')
+            plt.plot(rJPos[0])
+            plt.plot(rMaximas, [rJPos[0][i] for i in rMaximas], 'r*')
+            f.canvas.mpl_connect('button_press_event', onclick)
+            plt.show()
+            val = input("Press Enter if ok; \nType 'rm {int}' to remove a maxima; \nType 'add {int}' to add a maxima:\n")
+            continue
+        
+        lY = pd.Series(np.nan, index=range(0, data.shape[0]))
+        rY = pd.Series(np.nan, index=range(0, data.shape[0]))
+        for maxima in lMaximas:
+            lY[maxima] = 1
+            lY[maxima+1] = 0
+        for maxima in rMaximas:
+            rY[maxima] = 1
+            rY[maxima+1] = 0
+            
+        labels = pd.DataFrame({'lGP': lY, 'rGP': rY})
+        # Combine the data and the labels
+        data[labels.columns] = labels
+        all_maximas = sorted(lMaximas + rMaximas)
+        data = data.iloc[all_maximas[0]:all_maximas[-1]+1, :]
+        
+        f = plt.figure(figsize=(12, 5))
+        plt.subplot(121)
+        plt.title(file + ' Left')
+        plt.plot(lJPos[0])
+        plt.plot(lMaximas, [lJPos[0][i] for i in lMaximas], 'r*')
 
-    # Combine the data and the labels
-    for d, l in zip(data, labels):
-        d[l.columns] = l
+        plt.subplot(122)
+        plt.title(file + ' Right')
+        plt.plot(rJPos[0])
+        plt.plot(rMaximas, [rJPos[0][i] for i in rMaximas], 'r*')
+        
+        f.canvas.mpl_connect('button_press_event', onclick)
+        plt.show()
+        
+        np.savetxt(file[:10] + 'labeled_' + file[10:-4], data)
+        print("You just finihsed 1 trial! Yay!")
+        print("Labeled file saved as " + file[:10] + 'labeled_' + file[10:-4] + "\n\n")
 
-    return data
+def import_data(subject_list):
+    """imports all 5 trials of data, take only the columns corresponds to 
+    sensors in the sensors list. Format them into dataframe and put them in a
+    list.
+    
+    Returns:
+        list[Dataframes]: 5 trials of data of shape (M, 10)
+    """
+    data_list = []
+    for subject in subject_list:
+        file_path = f'data/AB{subject:02d}/' + '*' + "ZI*"
+        # Read data
+        for file in sorted(glob.glob(file_path)):
+            data = np.load(file)
+            data = pd.DataFrame(data, columns=columns)
+
+            # drop the 32nd column which only contains NaN values
+            data.dropna(axis=1, inplace=True)
+            # only keep the 10 sensors data columns
+            # data = data[sensors]
+            data_list.append(data)
+            
+    return data_list
 
 
 def cut_data(data):
@@ -209,14 +293,10 @@ def find_local_maximas(joint_positions):
     #               height of peaks > mean(joint_positions)
     #               distance between peaks > 100 samples
     #               width of peak < mean + 4*std of width
-    # maximas, _ = find_peaks(joint_positions, prominence=np.median(prominences)+np.var(prominences), 
-    #                         height=np.mean(joint_positions), distance=100,
-    #                         wlen=np.mean(width)+4*np.std(width))
-    maximas, _ = find_peaks(joint_positions, prominence=np.median(prominences) 
-                            + np.var(prominences), distance=130,
-                            height=np.mean(joint_positions)-np.var(joint_positions), 
-                            wlen=np.mean(width)+6*np.std(width))
-    return maximas
+    maximas, _ = find_peaks(joint_positions, 
+                            prominence=np.median(prominences)+np.var(prominences), 
+                            distance=150)
+    return maximas.tolist()
 
 
 def label_vectors(joint_positions):
@@ -297,7 +377,9 @@ def nn_extract_features(data_list, window_size, testing_trial):
     Y_train = np.zeros((1, 4))
     data_out = {}
     for i, data in enumerate(data_list):
+        # mode = data['nWalk']
         trial_X = data.iloc[:, :-4]
+        # trial_X = trial_X.drop(['nWalk'])
         trial_Y = data.iloc[:, -4:]
         if i+1 == testing_trial:
             feature_extracted_data = pd.DataFrame()
@@ -353,12 +435,10 @@ def nn_extract_features(data_list, window_size, testing_trial):
 
 def cnn_extract_features(data_list, window_size, testing_trial):
     """feature extraction for CNN and LSTM
-
     Args:
         data_list (list[DataFrames]): list of all data of shape (M, 14)
         window_size (int): window size
         testing_trial (int): between 1 - 10, represents the test trial
-
     Returns:
         dictionary: X_train, X_test - (M, window_size, 10); y_train, y_test - (M, 4)
     """
@@ -367,15 +447,17 @@ def cnn_extract_features(data_list, window_size, testing_trial):
     Y_test = np.zeros((1, 4))
     X_train = np.zeros((1, window_size, 10))
     Y_train = np.zeros((1, 4))
-    data_out = {}
+    mode = np.zeros((1, 1))
+    
     for i, data in enumerate(data_list):
-        data = data.to_numpy()
         if i+1 == testing_trial:
             # Generate Testing Data
             # raw gp%, not (x,y)
-            trial_X = data[:, :-4]
-            trial_Y = data[:, -4:]
-
+            nWalk = data['nWalk']
+            trial_X = data.iloc[:, :-4]
+            trial_X = trial_X.drop(['nWalk'])
+            trial_Y = data.iloc[:, -4:]
+            
             #Sliding window
             shape_des = (trial_X.shape[0] - window_size +
                          1, window_size, trial_X.shape[-1])
@@ -387,12 +469,8 @@ def cnn_extract_features(data_list, window_size, testing_trial):
 
             X_test = np.concatenate([X_test, trial_X], axis=0)
             Y_test = np.concatenate([Y_test, trial_Y], axis=0)
-
-            X_test = X_test[1:, :, :]
-            Y_test = Y_test[1:, :]
-
-            data_out['X_test'] = X_test
-            data_out['y_test'] = Y_test
+            mode = np.concatenate([mode, nWalk], axis=0)
+            
 
         else:
             # Generate Training Data
@@ -410,10 +488,13 @@ def cnn_extract_features(data_list, window_size, testing_trial):
 
             X_train = np.concatenate([X_train, trial_X], axis=0)
             Y_train = np.concatenate([Y_train, trial_Y], axis=0)
-
+    
+    X_test = X_test[1:, :, :]
+    Y_test = Y_test[1:, :]
+    nWalk = nWalk[1:, :]
     X_train = X_train[1:, :, :]
     Y_train = Y_train[1:, :]
-    data_out['X_train'] = X_train
-    data_out['y_train'] = Y_train
-
+    
+    data_out = {'X_test': X_test, 'y_test': Y_test, 'X_train': X_train, 
+                'y_train': Y_train, 'mode': mode}
     return data_out
