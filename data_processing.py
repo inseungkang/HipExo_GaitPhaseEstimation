@@ -1,6 +1,6 @@
 import math
 import glob
-import re
+import re, sys
 import pandas as pd
 import numpy as np
 import scipy
@@ -135,8 +135,8 @@ def manual_label_data(subject):
                     lMaximas.append(int(val[1]))
                     lMaximas.sort()
                 else: 
-                    print("Invalid Input")
-                    continue
+                    print("Invalid Input!!!")
+                    raise Exception
                 f = plt.figure(figsize=(10, 4))
                 plt.title(file + ' Left')
                 plt.plot(lJPos[0])
@@ -145,8 +145,10 @@ def manual_label_data(subject):
                 plt.show()
                 val = input("Press Enter if ok; \nType 'rm {int}' to remove a maxima; \nType 'add {int}' to add a maxima:\n")
                 continue
-            except:
+            except Exception:
                 print("Something went wrong >.<")
+                print(sys.exc_info())
+                val = input("Press Enter if ok; \nType 'rm {int}' to remove a maxima; \nType 'add {int}' to add a maxima:\n")
                 continue
         
         f = plt.figure(figsize=(10, 4))
@@ -170,7 +172,7 @@ def manual_label_data(subject):
                     rMaximas.sort()
                     print(f"Added point " + val[1])
                 else: 
-                    print("Invalid Input")
+                    print("Invalid Input!!!")
                     continue
                 f = plt.figure(figsize=(10, 4))
                 plt.title(file + ' Right')
@@ -180,10 +182,11 @@ def manual_label_data(subject):
                 plt.show()
                 val = input("Press Enter if ok; \nType 'rm {int}' to remove a maxima; \nType 'add {int}' to add a maxima:\n")
                 continue
-            except:
+            except Exception:
                 print("Something went wrong >.<")
+                print(sys.exc_info())
+                val = input("Press Enter if ok; \nType 'rm {int}' to remove a maxima; \nType 'add {int}' to add a maxima:\n")
                 continue
-        
         # Mark label as 1 at maximas and 0 at maxima+1
         lY = pd.Series(np.nan, index=range(0, data.shape[0]))
         rY = pd.Series(np.nan, index=range(0, data.shape[0]))
@@ -208,6 +211,18 @@ def manual_label_data(subject):
         # Combine the data and the labels
         data[labels.columns] = labels
         all_maximas = sorted(lMaximas + rMaximas)
+        all_maximas = all_maximas[1:-1]
+        
+        if lMaximas[0]<rMaximas[0]: 
+            lMaximas = lMaximas[1:]  
+        else: 
+            rMaximas = rMaximas[1:]
+        
+        if lMaximas[-1]>rMaximas[-1]: 
+            lMaximas = lMaximas[:-1] 
+        else: 
+            rMaximas = rMaximas[:-1]
+        
         data = data.iloc[all_maximas[0]:all_maximas[-1]+1, :]
         
         # Plot both left and right joint as well as the final peaks
