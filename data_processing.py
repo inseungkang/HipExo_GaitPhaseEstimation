@@ -16,7 +16,7 @@ columns = ['lJPos', 'rJPos', 'lJVel', 'rJVel', 'lJTorque', 'rJTorque',
            'lRecvTorque', 'rRecvTorque', 'lStanceSwing', 'rStanceSwing', 'nWalk', 'lWalk', 'rWalk', 'none']
 sensors = ['lJPos', 'rJPos', 'lJVel',
            'rJVel', 'gyroX', 'gyroY', 'gyroZ', 'accX',
-           'accY', 'accZ', 'nWalk', 'lGC', 'rGC']
+           'accY', 'accZ', 'nWalk']
 
 def segment_data():
     """load and segment out data from each circuit and cutting out standing data
@@ -84,13 +84,17 @@ def find_standing_phase(data):
     return standing_indices
 
 def manual_label_data(subject):
-    """Label the data, and combine the data with the label columns
+    """For each trial, plot the joint position and detected the peaks, when
+    click on the graph, the x-coordinate of the mouse click will be printed and the
+    plot will be closed. Then user need to enter "add {int: x-coord}" to add a
+    peak, "rm {int: x-coord}" to remove the nearest peak, or press enter to move on
+    to the next trial. 
+    A plot with both left and right joint will be displayed, when that plot is
+    closed, a file containing the labeled data will be saved to the
+    correspond subject's data folder.
 
     Args:
-        data (list[Dataframes]): 5 trials of data of shape (M, 10)
-
-    Returns:
-        list[Dataframes]: 5 trials of data of shape (M, 14)
+        subject (int): subject number
     """
     def onclick(event):
         print(event.xdata)
@@ -110,7 +114,9 @@ def manual_label_data(subject):
         
         lJPos, rJPos = extract_joint_positions([data])
         lMaximas, rMaximas = find_local_maximas(lJPos[0]), find_local_maximas(rJPos[0])
-         
+        
+        # Plot graph, onclick -> print x coordinate and close graph
+        # Get input from uesr to add peak, delete peak, or move on to the next plot
         f = plt.figure(figsize=(10, 4))
         plt.title(file + ' Left')
         plt.plot(lJPos[0])
@@ -119,25 +125,29 @@ def manual_label_data(subject):
         plt.show()
         val = input("Press Enter if ok; \nType 'rm {int}' to remove a maxima; \nType 'add {int}' to add a maxima:\n")
         while val:
-            plt.close()
-            val = val.split(' ')
-            if val[0] == 'rm': 
-                closest = min(lMaximas, key=lambda x : abs(x-int(val[1])))
-                lMaximas.remove(closest)
-            elif val[0] == 'add':
-                lMaximas.append(int(val[1]))
-                lMaximas.sort()
-            else: 
-                print("Invalid Input")
+            try:
+                plt.close()
+                val = val.split(' ')
+                if val[0] == 'rm': 
+                    closest = min(lMaximas, key=lambda x : abs(x-int(val[1])))
+                    lMaximas.remove(closest)
+                elif val[0] == 'add':
+                    lMaximas.append(int(val[1]))
+                    lMaximas.sort()
+                else: 
+                    print("Invalid Input")
+                    continue
+                f = plt.figure(figsize=(10, 4))
+                plt.title(file + ' Left')
+                plt.plot(lJPos[0])
+                plt.plot(lMaximas, [lJPos[0][i] for i in lMaximas], 'r*')
+                f.canvas.mpl_connect('button_press_event', onclick)
+                plt.show()
+                val = input("Press Enter if ok; \nType 'rm {int}' to remove a maxima; \nType 'add {int}' to add a maxima:\n")
                 continue
-            f = plt.figure(figsize=(10, 4))
-            plt.title(file + ' Left')
-            plt.plot(lJPos[0])
-            plt.plot(lMaximas, [lJPos[0][i] for i in lMaximas], 'r*')
-            f.canvas.mpl_connect('button_press_event', onclick)
-            plt.show()
-            val = input("Press Enter if ok; \nType 'rm {int}' to remove a maxima; \nType 'add {int}' to add a maxima:\n")
-            continue
+            except:
+                print("Something went wrong >.<")
+                continue
         
         f = plt.figure(figsize=(10, 4))
         plt.title(file + ' Right')
@@ -145,6 +155,7 @@ def manual_label_data(subject):
         plt.plot(rMaximas, [rJPos[0][i] for i in rMaximas], 'r*')
         f.canvas.mpl_connect('button_press_event', onclick)
         plt.show()
+        
         val = input("Press Enter if ok; \nType 'rm {int}' to remove a maxima; \nType 'add {int}' to add a maxima:\n")
         while val:
             try:
@@ -172,7 +183,8 @@ def manual_label_data(subject):
             except:
                 print("Something went wrong >.<")
                 continue
-
+        
+        # Mark label as 1 at maximas and 0 at maxima+1
         lY = pd.Series(np.nan, index=range(0, data.shape[0]))
         rY = pd.Series(np.nan, index=range(0, data.shape[0]))
         for maxima in lMaximas:
@@ -182,6 +194,9 @@ def manual_label_data(subject):
             rY[maxima] = 1
             rY[maxima+1] = 0
         
+        # Linearly interpolate the labels between every 0 and 1 and fill in the
+        # rest with 0's
+        # Conver to polar coordinates
         lY.interpolate(inplace=True), rY.interpolate(inplace=True)
         lY.fillna(0, inplace=True), rY.fillna(0, inplace=True)
         ly_theta, ry_theta = lY * 2 * np.pi, rY * 2 * np.pi
@@ -195,6 +210,7 @@ def manual_label_data(subject):
         all_maximas = sorted(lMaximas + rMaximas)
         data = data.iloc[all_maximas[0]:all_maximas[-1]+1, :]
         
+        # Plot both left and right joint as well as the final peaks
         f = plt.figure(figsize=(10, 7))
         plt.subplot(211)
         plt.title(file + ' Left')
@@ -210,8 +226,9 @@ def manual_label_data(subject):
         
         f.canvas.mpl_connect('button_press_event', onclick)
         plt.show()
-        data.drop(columns=['lGC', 'rGC'], inplace = True)
-        print(data.info())
+        
+        # Save the labeled data file to the corresponding folder
+        # Each file should be shape (M, 15) -> 10 sensors + nWalk + 4 labels
         np.savetxt(file[:10] + 'labeled_' + file[10:-4], data)
         print("You just finihsed 1 trial! Yay!")
         print("Labeled file saved as " + file[:10] + 'labeled_' + file[10:-4] + "\n\n")
