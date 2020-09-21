@@ -2,7 +2,7 @@ from data_processing import *
 from model_training import *
 
 # segment_data()
-manual_label_data(1)
+manual_label_data(5)
 # data = label_data(data)
 # data = cut_data(data)
 # ###################### Training Neural Network ##################
