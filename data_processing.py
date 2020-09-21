@@ -16,7 +16,7 @@ columns = ['lJPos', 'rJPos', 'lJVel', 'rJVel', 'lJTorque', 'rJTorque',
            'lRecvTorque', 'rRecvTorque', 'lStanceSwing', 'rStanceSwing', 'nWalk', 'lWalk', 'rWalk', 'none']
 sensors = ['lJPos', 'rJPos', 'lJVel',
            'rJVel', 'gyroX', 'gyroY', 'gyroZ', 'accX',
-           'accY', 'accZ', 'nWalk']
+           'accY', 'accZ', 'nWalk', 'lGC', 'rGC']
 
 def segment_data():
     """load and segment out data from each circuit and cutting out standing data
@@ -104,8 +104,10 @@ def manual_label_data(subject):
 
         # drop the 32nd column which only contains NaN values
         data.dropna(axis=1, inplace=True)
-        # only keep the 10 sensors data columns + nWalk
+        
+        # only keep the 10 sensors data columns + nWalk, lGC, rGC
         data = data[sensors]
+        
         lJPos, rJPos = extract_joint_positions([data])
         lMaximas, rMaximas = find_local_maximas(lJPos[0]), find_local_maximas(rJPos[0])
          
@@ -145,28 +147,32 @@ def manual_label_data(subject):
         plt.show()
         val = input("Press Enter if ok; \nType 'rm {int}' to remove a maxima; \nType 'add {int}' to add a maxima:\n")
         while val:
-            plt.close()
-            val = val.split(' ')
-            if val[0] == 'rm': 
-                closest = min(rMaximas, key=lambda x : abs(x-int(val[1])))
-                rMaximas.remove(closest)
-                print(f"Removed point {closest}")
-            elif val[0] == 'add':
-                rMaximas.append(int(val[1]))
-                rMaximas.sort()
-                print(f"Added point " + val[1])
-            else: 
-                print("Invalid Input")
+            try:
+                plt.close()
+                val = val.split(' ')
+                if val[0] == 'rm': 
+                    closest = min(rMaximas, key=lambda x : abs(x-int(val[1])))
+                    rMaximas.remove(closest)
+                    print(f"Removed point {closest}")
+                elif val[0] == 'add':
+                    rMaximas.append(int(val[1]))
+                    rMaximas.sort()
+                    print(f"Added point " + val[1])
+                else: 
+                    print("Invalid Input")
+                    continue
+                f = plt.figure(figsize=(10, 4))
+                plt.title(file + ' Right')
+                plt.plot(rJPos[0])
+                plt.plot(rMaximas, [rJPos[0][i] for i in rMaximas], 'r*')
+                f.canvas.mpl_connect('button_press_event', onclick)
+                plt.show()
+                val = input("Press Enter if ok; \nType 'rm {int}' to remove a maxima; \nType 'add {int}' to add a maxima:\n")
                 continue
-            f = plt.figure(figsize=(10, 4))
-            plt.title(file + ' Right')
-            plt.plot(rJPos[0])
-            plt.plot(rMaximas, [rJPos[0][i] for i in rMaximas], 'r*')
-            f.canvas.mpl_connect('button_press_event', onclick)
-            plt.show()
-            val = input("Press Enter if ok; \nType 'rm {int}' to remove a maxima; \nType 'add {int}' to add a maxima:\n")
-            continue
-        
+            except:
+                print("Something went wrong >.<")
+                continue
+
         lY = pd.Series(np.nan, index=range(0, data.shape[0]))
         rY = pd.Series(np.nan, index=range(0, data.shape[0]))
         for maxima in lMaximas:
@@ -175,27 +181,37 @@ def manual_label_data(subject):
         for maxima in rMaximas:
             rY[maxima] = 1
             rY[maxima+1] = 0
-            
-        labels = pd.DataFrame({'lGP': lY, 'rGP': rY})
+        
+        lY.interpolate(inplace=True), rY.interpolate(inplace=True)
+        lY.fillna(0, inplace=True), rY.fillna(0, inplace=True)
+        ly_theta, ry_theta = lY * 2 * np.pi, rY * 2 * np.pi
+        left_x, left_y = np.cos(ly_theta), np.sin(ly_theta)
+        right_x, right_y = np.cos(ry_theta), np.sin(ry_theta)
+        labels = pd.DataFrame({'leftGaitPhaseX': left_x, 'leftGaitPhaseY': left_y,
+                                 'rightGaitPhaseX': right_x, 'rightGaitPhaseY': right_y})
+        
         # Combine the data and the labels
         data[labels.columns] = labels
         all_maximas = sorted(lMaximas + rMaximas)
         data = data.iloc[all_maximas[0]:all_maximas[-1]+1, :]
         
-        f = plt.figure(figsize=(12, 5))
-        plt.subplot(121)
+        f = plt.figure(figsize=(10, 7))
+        plt.subplot(211)
         plt.title(file + ' Left')
-        plt.plot(lJPos[0])
-        plt.plot(lMaximas, [lJPos[0][i] for i in lMaximas], 'r*')
+        plt.plot(data['lJPos'])
+        # plt.vlines([i for i, v in enumerate(data['lGC']) if v == 0], -1, 1, 'r')
+        plt.plot(lMaximas, [data['lJPos'][i] for i in lMaximas], 'r*')
 
-        plt.subplot(122)
+        plt.subplot(212)
         plt.title(file + ' Right')
-        plt.plot(rJPos[0])
-        plt.plot(rMaximas, [rJPos[0][i] for i in rMaximas], 'r*')
+        plt.plot(data['rJPos'])
+        # plt.vlines([i for i, v in enumerate(data['rGC']) if v == 0], -1, 1, 'r')
+        plt.plot(rMaximas, [data['rJPos'][i] for i in rMaximas], 'r*')
         
         f.canvas.mpl_connect('button_press_event', onclick)
         plt.show()
-        
+        data.drop(columns=['lGC', 'rGC'], inplace = True)
+        print(data.info())
         np.savetxt(file[:10] + 'labeled_' + file[10:-4], data)
         print("You just finihsed 1 trial! Yay!")
         print("Labeled file saved as " + file[:10] + 'labeled_' + file[10:-4] + "\n\n")
@@ -223,6 +239,30 @@ def import_data(subject_list):
             data_list.append(data)
             
     return data_list
+
+def label_data(data):
+    """Label the data, and combine the data with the label columns
+    Args:
+        data (list[Dataframes]): 5 trials of data of shape (M, 10)
+    Returns:
+        list[Dataframes]: 5 trials of data of shape (M, 14)
+    """
+    
+    left_joint_positions, right_joint_positions = extract_joint_positions(data)
+
+    labels = []
+    for i in range(5):
+        left_x, left_y = label_vectors(left_joint_positions[i])
+        right_x, right_y = label_vectors(right_joint_positions[i])
+        label_df = pd.DataFrame({'leftGaitPhaseX': left_x, 'leftGaitPhaseY': left_y,
+                                 'rightGaitPhaseX': right_x, 'rightGaitPhaseY': right_y})
+        labels.append(label_df)
+
+    # Combine the data and the labels
+    for d, l in zip(data, labels):
+        d[l.columns] = l
+
+    return data
 
 
 def cut_data(data):
