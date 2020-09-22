@@ -487,30 +487,23 @@ def cnn_extract_features(data_list, window_size, testing_trial):
     Y_test = np.zeros((1, 4))
     X_train = np.zeros((1, window_size, 10))
     Y_train = np.zeros((1, 4))
-    mode = np.zeros((1, 1))
     
     for i, data in enumerate(data_list):
+        data = data.to_numpy()
         if i+1 == testing_trial:
             # Generate Testing Data
             # raw gp%, not (x,y)
-            nWalk = data['nWalk']
-            trial_X = data.iloc[:, :-4]
-            trial_X = trial_X.drop(['nWalk'])
-            trial_Y = data.iloc[:, -4:]
+            trial_X = data[:, :-4]
+            trial_Y = data[:, -4:]
             
             #Sliding window
-            shape_des = (trial_X.shape[0] - window_size +
-                         1, window_size, trial_X.shape[-1])
-            strides_des = (
-                trial_X.strides[0], trial_X.strides[0], trial_X.strides[1])
-            trial_X = np.lib.stride_tricks.as_strided(trial_X, shape=shape_des,
-                                                      strides=strides_des)
+            shape_des = (trial_X.shape[0] - window_size + 1, window_size, trial_X.shape[-1])
+            strides_des = (trial_X.strides[0], trial_X.strides[0], trial_X.strides[1])
+            trial_X = np.lib.stride_tricks.as_strided(trial_X, shape=shape_des, strides=strides_des)
             trial_Y = trial_Y[window_size-1:]
 
             X_test = np.concatenate([X_test, trial_X], axis=0)
-            Y_test = np.concatenate([Y_test, trial_Y], axis=0)
-            mode = np.concatenate([mode, nWalk], axis=0)
-            
+            Y_test = np.concatenate([Y_test, trial_Y], axis=0)            
 
         else:
             # Generate Training Data
@@ -518,12 +511,9 @@ def cnn_extract_features(data_list, window_size, testing_trial):
             trial_Y = data[:, -4:]  # raw gp%
 
             #Sliding window
-            shape_des = (trial_X.shape[0] - window_size +
-                         1, window_size, trial_X.shape[-1])
-            strides_des = (
-                trial_X.strides[0], trial_X.strides[0], trial_X.strides[1])
-            trial_X = np.lib.stride_tricks.as_strided(trial_X, shape=shape_des,
-                                                      strides=strides_des)
+            shape_des = (trial_X.shape[0] - window_size + 1, window_size, trial_X.shape[-1])
+            strides_des = (trial_X.strides[0], trial_X.strides[0], trial_X.strides[1])
+            trial_X = np.lib.stride_tricks.as_strided(trial_X, shape=shape_des, strides=strides_des)
             trial_Y = trial_Y[window_size-1:]
 
             X_train = np.concatenate([X_train, trial_X], axis=0)
@@ -531,10 +521,8 @@ def cnn_extract_features(data_list, window_size, testing_trial):
     
     X_test = X_test[1:, :, :]
     Y_test = Y_test[1:, :]
-    nWalk = nWalk[1:, :]
     X_train = X_train[1:, :, :]
     Y_train = Y_train[1:, :]
     
-    data_out = {'X_test': X_test, 'y_test': Y_test, 'X_train': X_train, 
-                'y_train': Y_train, 'mode': mode}
+    data_out = {'X_test': X_test, 'y_test': Y_test, 'X_train': X_train, 'y_train': Y_train}
     return data_out
