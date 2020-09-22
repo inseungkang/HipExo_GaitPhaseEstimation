@@ -17,6 +17,7 @@ columns = ['lJPos', 'rJPos', 'lJVel', 'rJVel', 'lJTorque', 'rJTorque',
 sensors = ['lJPos', 'rJPos', 'lJVel',
            'rJVel', 'gyroX', 'gyroY', 'gyroZ', 'accX',
            'accY', 'accZ', 'nWalk']
+gait_phase = ['leftGaitPhaseX', 'leftGaitPhaseY', 'rightGaitPhaseX', 'rightGaitPhaseY']
 
 def segment_data():
     """load and segment out data from each circuit and cutting out standing data
@@ -82,6 +83,7 @@ def find_standing_phase(data):
 
     standing_indices = np.sort(np.hstack([begin, end]))
     return standing_indices
+
 
 def manual_label_data(subject):
     """For each trial, plot the joint position and detected the peaks, when
@@ -250,28 +252,30 @@ def manual_label_data(subject):
 
 
 def import_subject_data(subject_list):
-    """imports all 5 trials of data, take only the columns corresponds to 
-    sensors in the sensors list. Format them into dataframe and put them in a
-    list.
-    
-    Returns:
-        list[Dataframes]: 5 trials of data of shape (M, 10)
-    """
-    data_list = []
-    for subject in subject_list:
-        file_path = f'data/AB{subject:02d}/' + '*' + "ZI*"
-        # Read data
-        for file in sorted(glob.glob(file_path)):
-            data = np.load(file)
-            data = pd.DataFrame(data, columns=columns)
+    """ import data and organize them based on subject and direction (CW/CCW)
 
-            # drop the 32nd column which only contains NaN values
-            data.dropna(axis=1, inplace=True)
-            # only keep the 10 sensors data columns
-            # data = data[sensors]
-            data_list.append(data)
-            
-    return data_list
+    Args:
+        subject_list (list[int]): a list of subject numbers
+
+    Returns:
+        dict{dict{list{DataFrames}}}: ex: data = {'AB01': {'CW': [dataframe,
+        ...], 'CCW': [dataframe, ...]}, 'AB02': {...} }
+    """
+    
+    data = {}
+    for subject in subject_list:
+        subject_data = {}
+        for condition in ['CW', 'CCW']:
+            file_path = f'data/AB{subject:02d}/labeled_' + condition + '*ZI*'
+            # Read data
+            data_list = []
+            for file in sorted(glob.glob(file_path)):
+                trial_data = np.loadtxt(file)
+                trial_data = pd.DataFrame(trial_data, columns=sensors+gait_phase)
+                data_list.append(trial_data)
+            subject_data[condition] = data_list
+        data[f'AB{subject:02d}'] = subject_data
+    return data
 
 
 def import_data():
@@ -408,7 +412,7 @@ def find_local_maximas(joint_positions):
 
 def label_vectors(joint_positions):
     """generates the gait phase from a joint position time series data and
-converts to polar coordinates
+    converts to polar coordinates
 
     Args:
         joint_positions (Series): joint position time seire data
