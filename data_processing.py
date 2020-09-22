@@ -248,7 +248,8 @@ def manual_label_data(subject):
         print("You just finihsed 1 trial! Yay!")
         print("Labeled file saved as " + file[:10] + 'labeled_' + file[10:-4] + "\n\n")
 
-def import_data(subject_list):
+
+def import_subject_data(subject_list):
     """imports all 5 trials of data, take only the columns corresponds to 
     sensors in the sensors list. Format them into dataframe and put them in a
     list.
@@ -271,6 +272,40 @@ def import_data(subject_list):
             data_list.append(data)
             
     return data_list
+
+
+def import_data():
+    """imports all 5 trials of data, take only the columns corresponds to 
+    sensors in the sensors list. Format them into dataframe and put them in a
+    list.
+    
+    Returns:
+        list[Dataframes]: 5 trials of data of shape (M, 10)
+    """
+
+    # Read data
+    columns = pd.read_csv('data/columns.txt', header=None)
+    data1 = pd.read_csv('data/trial_1.txt', sep=" ", header=None)
+    data2 = pd.read_csv('data/trial_2.txt', sep=" ", header=None)
+    data3 = pd.read_csv('data/trial_3.txt', sep=" ", header=None)
+    data4 = pd.read_csv('data/trial_4.txt', sep=" ", header=None)
+    data5 = pd.read_csv('data/trial_5.txt', sep=" ", header=None)
+
+    # Format data
+    data_all = [data1, data2, data3, data4, data5]
+    columns_list = columns.transpose().values.tolist()[0]
+    data_list = []
+    for data in data_all:
+        # drop the 32nd column which only contains NaN values
+        data.dropna(axis=1, inplace=True)
+        # rename the columns
+        data.columns = columns_list
+        # only keep the 10 sensors data columns
+        data = data[sensors]
+        data_list.append(data)
+
+    return data_list
+
 
 def label_data(data):
     """Label the data, and combine the data with the label columns
