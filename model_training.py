@@ -139,7 +139,7 @@ def train_models(model_type, hyperparameter_configs, data_list):
     for trial in results:
         left_val_rmse = trial['left_validation_rmse']
         right_val_rmse = trial['right_validation_rmse']
-        for i in np.arange(4):
+        for i in np.arange(5):
             trial_result = {}
             trial_result['trial'] = i
             trial_result['window_size'] = trial['model_config']['window_size']
