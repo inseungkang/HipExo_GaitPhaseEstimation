@@ -1,8 +1,7 @@
-from data_processing import *
-from model_training import *
+from data_cleaning import *
 
 # segment_data()
-manual_label_data(5)
+manual_scrap_data(1)
 # data = label_data(data)
 # data = cut_data(data)
 # ###################### Training Neural Network ##################
