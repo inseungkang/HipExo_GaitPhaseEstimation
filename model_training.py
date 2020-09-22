@@ -119,7 +119,7 @@ def train_models(model_type, hyperparameter_configs, data_list):
         current_result['model_config'] = model_config
         current_result['left_validation_rmse'] = []
         current_result['right_validation_rmse'] = []
-        for test_trial in np.arange(1,11):
+        for test_trial in np.arange(1,6):
             dataset = get_dataset(model_type, data_list, model_config['window_size'], test_trial)
             print(dataset['X_train'].shape)
             model = create_model(model_config, dataset)
@@ -139,7 +139,7 @@ def train_models(model_type, hyperparameter_configs, data_list):
     for trial in results:
         left_val_rmse = trial['left_validation_rmse']
         right_val_rmse = trial['right_validation_rmse']
-        for i in np.arange(10):
+        for i in np.arange(4):
             trial_result = {}
             trial_result['trial'] = i
             trial_result['window_size'] = trial['model_config']['window_size']
@@ -156,6 +156,7 @@ def train_models(model_type, hyperparameter_configs, data_list):
 
             for key in trial['model_config']['training'].keys():
                 trial_result['training_{}'.format(key)] = trial['model_config']['training'][key]
+
             trial_result['left_validation_rmse'] = left_val_rmse[i]
             trial_result['right_validation_rmse'] = right_val_rmse[i]
             per_trial_results.append(trial_result)

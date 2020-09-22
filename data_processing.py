@@ -1,55 +1,281 @@
 import math
+import glob
+import re, sys
 import pandas as pd
 import numpy as np
 import scipy
+import matplotlib.pyplot as plt
 from scipy.signal import find_peaks, peak_prominences, peak_widths
 import warnings
 warnings.filterwarnings("ignore")
 
-sensors = ['leftJointPosition', 'rightJointPosition', 'leftJointVelocity',
-           'rightJointVelocity', 'imuGyroX', 'imuGyroY', 'imuGyroZ', 'imuAccX',
-           'imuAccY', 'imuAccZ']
+columns = ['lJPos', 'rJPos', 'lJVel', 'rJVel', 'lJTorque', 'rJTorque',
+           'eulerX', 'eulerY', 'eulerZ', 'gyroX', 'gyroY', 'gyroZ', 'accX', 'accY', 'accZ',
+           'batt', 'cpu', 'mem', 'lBttn', 'rBttn', 'time', 'lJVelFilt', 'rJVelFilt',
+           'lJPosReset', 'rJPosReset', 'lGC', 'rGC', 'stand', 'lCmdTorque', 'rCmdTorque',
+           'lRecvTorque', 'rRecvTorque', 'lStanceSwing', 'rStanceSwing', 'nWalk', 'lWalk', 'rWalk', 'none']
+sensors = ['lJPos', 'rJPos', 'lJVel',
+           'rJVel', 'gyroX', 'gyroY', 'gyroZ', 'accX',
+           'accY', 'accZ', 'nWalk']
+
+def segment_data():
+    """load and segment out data from each circuit and cutting out standing data
+    """
+    for subject in range(10, 11):
+        for file_path in glob.glob(f'data/raw/AB{subject:02d}*.txt'):
+            data = pd.read_csv(file_path, sep=" ", header=None)
+            data.columns = columns
+            lJPos, rJPos = extract_joint_positions([data])
+            stand = find_standing_phase(lJPos[0])
+            stand = np.append(stand, len(lJPos[0]) - 1)
+            diff = np.abs(np.diff(stand))
+            diff_ix = [i for i, v in enumerate(diff) if v > 3000]
+            cut_ix = []
+            for i in diff_ix:
+                cut_ix.append(stand[i])
+                cut_ix.append(stand[i+1])
+            data_cut = []
+            for i in range(math.floor((len(cut_ix)/2))):
+                segment = data.iloc[cut_ix[i*2]
+                    :cut_ix[(i*2)+1]+1]
+                data_cut.append(segment)
+                
+            for i, segment in enumerate(data_cut[-5:]):
+                save_file_path = file_path[:9] + '/' + file_path[10:-4] + f'_{i+1}'
+                # np.save(save_file_path, segment)
+            # print(len(data_cut))
+            # print(file_path)
+            # print(len(data_cut))
+    #         print(stand)
+    #         print(diff)
+    #         print(cut_ix)
+    #         print("")
+            plt.figure(figsize=(10, 5))
+            plt.plot(lJPos[0])
+            plt.plot(rJPos[0], 'r')
+            plt.vlines(cut_ix[-10:], -1, 1)
+            plt.title(file_path)
+    plt.show()
 
 
-def import_data():
+def find_standing_phase(data):
+    ''' 
+    Input: 1D array of joint position data
+    Output: 1D array of indices representing the standing phase segments in the
+    format of [start, end, start, ... end]
+    '''
+
+    diff = np.abs(np.diff(data))
+    threshold = 0.0058
+    diff[diff <= threshold], diff[diff > threshold] = 0, 1
+
+    # use string pattern matching to find the start and end indices of the
+    # standing phases
+    diff_str = ''.join(str(x) for x in diff.astype(int))
+    begin = [m.start() for m in re.finditer(r'10{97}', diff_str)]
+    end = [m.end() for m in re.finditer(r'0{97}1', diff_str)]
+
+    if (np.min(end) < np.min(begin)):
+        begin.append(0)
+    if (np.max(end) < np.max(begin)):
+        end.append(len(data))
+
+    standing_indices = np.sort(np.hstack([begin, end]))
+    return standing_indices
+
+def manual_label_data(subject):
+    """For each trial, plot the joint position and detected the peaks, when
+    click on the graph, the x-coordinate of the mouse click will be printed and the
+    plot will be closed. Then user need to enter "add {int: x-coord}" to add a
+    peak, "rm {int: x-coord}" to remove the nearest peak, or press enter to move on
+    to the next trial. 
+    A plot with both left and right joint will be displayed, when that plot is
+    closed, a file containing the labeled data will be saved to the
+    correspond subject's data folder.
+
+    Args:
+        subject (int): subject number
+    """
+    def onclick(event):
+        print(event.xdata)
+        plt.close()
+    
+    file_path = f'data/AB{subject:02d}/' + '*' + "ZI*.npy"
+    # Read data
+    for file in sorted(glob.glob(file_path)):
+        data = np.load(file)
+        data = pd.DataFrame(data, columns=columns)
+
+        # drop the 32nd column which only contains NaN values
+        data.dropna(axis=1, inplace=True)
+        
+        # only keep the 10 sensors data columns + nWalk, lGC, rGC
+        data = data[sensors]
+        
+        lJPos, rJPos = extract_joint_positions([data])
+        lMaximas, rMaximas = find_local_maximas(lJPos[0]), find_local_maximas(rJPos[0])
+        
+        # Plot graph, onclick -> print x coordinate and close graph
+        # Get input from uesr to add peak, delete peak, or move on to the next plot
+        f = plt.figure(figsize=(10, 4))
+        plt.title(file + ' Left')
+        plt.plot(lJPos[0])
+        plt.plot(lMaximas, [lJPos[0][i] for i in lMaximas], 'r*')
+        f.canvas.mpl_connect('button_press_event', onclick)
+        plt.show()
+        val = input("Press Enter if ok; \nType 'rm {int}' to remove a maxima; \nType 'add {int}' to add a maxima:\n")
+        while val:
+            try:
+                plt.close()
+                val = val.split(' ')
+                if val[0] == 'rm': 
+                    closest = min(lMaximas, key=lambda x : abs(x-int(val[1])))
+                    lMaximas.remove(closest)
+                elif val[0] == 'add':
+                    lMaximas.append(int(val[1]))
+                    lMaximas.sort()
+                else: 
+                    print("Invalid Input!!!")
+                    raise Exception
+                f = plt.figure(figsize=(10, 4))
+                plt.title(file + ' Left')
+                plt.plot(lJPos[0])
+                plt.plot(lMaximas, [lJPos[0][i] for i in lMaximas], 'r*')
+                f.canvas.mpl_connect('button_press_event', onclick)
+                plt.show()
+                val = input("Press Enter if ok; \nType 'rm {int}' to remove a maxima; \nType 'add {int}' to add a maxima:\n")
+                continue
+            except Exception:
+                print("Something went wrong >.<")
+                print(sys.exc_info())
+                val = input("Press Enter if ok; \nType 'rm {int}' to remove a maxima; \nType 'add {int}' to add a maxima:\n")
+                continue
+        
+        f = plt.figure(figsize=(10, 4))
+        plt.title(file + ' Right')
+        plt.plot(rJPos[0])
+        plt.plot(rMaximas, [rJPos[0][i] for i in rMaximas], 'r*')
+        f.canvas.mpl_connect('button_press_event', onclick)
+        plt.show()
+        
+        val = input("Press Enter if ok; \nType 'rm {int}' to remove a maxima; \nType 'add {int}' to add a maxima:\n")
+        while val:
+            try:
+                plt.close()
+                val = val.split(' ')
+                if val[0] == 'rm': 
+                    closest = min(rMaximas, key=lambda x : abs(x-int(val[1])))
+                    rMaximas.remove(closest)
+                    print(f"Removed point {closest}")
+                elif val[0] == 'add':
+                    rMaximas.append(int(val[1]))
+                    rMaximas.sort()
+                    print(f"Added point " + val[1])
+                else: 
+                    print("Invalid Input!!!")
+                    continue
+                f = plt.figure(figsize=(10, 4))
+                plt.title(file + ' Right')
+                plt.plot(rJPos[0])
+                plt.plot(rMaximas, [rJPos[0][i] for i in rMaximas], 'r*')
+                f.canvas.mpl_connect('button_press_event', onclick)
+                plt.show()
+                val = input("Press Enter if ok; \nType 'rm {int}' to remove a maxima; \nType 'add {int}' to add a maxima:\n")
+                continue
+            except Exception:
+                print("Something went wrong >.<")
+                print(sys.exc_info())
+                val = input("Press Enter if ok; \nType 'rm {int}' to remove a maxima; \nType 'add {int}' to add a maxima:\n")
+                continue
+        # Mark label as 1 at maximas and 0 at maxima+1
+        lY = pd.Series(np.nan, index=range(0, data.shape[0]))
+        rY = pd.Series(np.nan, index=range(0, data.shape[0]))
+        for maxima in lMaximas:
+            lY[maxima] = 1
+            lY[maxima+1] = 0
+        for maxima in rMaximas:
+            rY[maxima] = 1
+            rY[maxima+1] = 0
+        
+        # Linearly interpolate the labels between every 0 and 1 and fill in the
+        # rest with 0's
+        # Conver to polar coordinates
+        lY.interpolate(inplace=True), rY.interpolate(inplace=True)
+        lY.fillna(0, inplace=True), rY.fillna(0, inplace=True)
+        ly_theta, ry_theta = lY * 2 * np.pi, rY * 2 * np.pi
+        left_x, left_y = np.cos(ly_theta), np.sin(ly_theta)
+        right_x, right_y = np.cos(ry_theta), np.sin(ry_theta)
+        labels = pd.DataFrame({'leftGaitPhaseX': left_x, 'leftGaitPhaseY': left_y,
+                                 'rightGaitPhaseX': right_x, 'rightGaitPhaseY': right_y})
+        
+        # Combine the data and the labels
+        data[labels.columns] = labels
+        all_maximas = sorted(lMaximas + rMaximas)
+        all_maximas = all_maximas[1:-1]
+        
+        if lMaximas[0]<rMaximas[0]: 
+            lMaximas = lMaximas[1:]  
+        else: 
+            rMaximas = rMaximas[1:]
+        
+        if lMaximas[-1]>rMaximas[-1]: 
+            lMaximas = lMaximas[:-1] 
+        else: 
+            rMaximas = rMaximas[:-1]
+        
+        data = data.iloc[all_maximas[0]:all_maximas[-1]+1, :]
+        
+        # Plot both left and right joint as well as the final peaks
+        f = plt.figure(figsize=(10, 7))
+        plt.subplot(211)
+        plt.title(file + ' Left')
+        plt.plot(data['lJPos'])
+        # plt.vlines([i for i, v in enumerate(data['lGC']) if v == 0], -1, 1, 'r')
+        plt.plot(lMaximas, [data['lJPos'][i] for i in lMaximas], 'r*')
+
+        plt.subplot(212)
+        plt.title(file + ' Right')
+        plt.plot(data['rJPos'])
+        # plt.vlines([i for i, v in enumerate(data['rGC']) if v == 0], -1, 1, 'r')
+        plt.plot(rMaximas, [data['rJPos'][i] for i in rMaximas], 'r*')
+        
+        f.canvas.mpl_connect('button_press_event', onclick)
+        plt.show()
+        
+        # Save the labeled data file to the corresponding folder
+        # Each file should be shape (M, 15) -> 10 sensors + nWalk + 4 labels
+        np.savetxt(file[:10] + 'labeled_' + file[10:-4], data)
+        print("You just finihsed 1 trial! Yay!")
+        print("Labeled file saved as " + file[:10] + 'labeled_' + file[10:-4] + "\n\n")
+
+def import_data(subject_list):
     """imports all 5 trials of data, take only the columns corresponds to 
     sensors in the sensors list. Format them into dataframe and put them in a
     list.
-
+    
     Returns:
         list[Dataframes]: 5 trials of data of shape (M, 10)
     """
-    
-    # Read data
-    columns = pd.read_csv('data/columns.txt', header=None)
-    data1 = pd.read_csv('data/trial_1.txt', sep=" ", header=None)
-    data2 = pd.read_csv('data/trial_2.txt', sep=" ", header=None)
-    data3 = pd.read_csv('data/trial_3.txt', sep=" ", header=None)
-    data4 = pd.read_csv('data/trial_4.txt', sep=" ", header=None)
-    data5 = pd.read_csv('data/trial_5.txt', sep=" ", header=None)
-
-    # Format data
-    data_all = [data1, data2, data3, data4, data5]
-    columns_list = columns.transpose().values.tolist()[0]
     data_list = []
-    for data in data_all:
-        # drop the 32nd column which only contains NaN values
-        data.dropna(axis=1, inplace=True)
-        # rename the columns
-        data.columns = columns_list
-        # only keep the 10 sensors data columns
-        data = data[sensors]
-        data_list.append(data)
+    for subject in subject_list:
+        file_path = f'data/AB{subject:02d}/' + '*' + "ZI*"
+        # Read data
+        for file in sorted(glob.glob(file_path)):
+            data = np.load(file)
+            data = pd.DataFrame(data, columns=columns)
 
+            # drop the 32nd column which only contains NaN values
+            data.dropna(axis=1, inplace=True)
+            # only keep the 10 sensors data columns
+            # data = data[sensors]
+            data_list.append(data)
+            
     return data_list
-
 
 def label_data(data):
     """Label the data, and combine the data with the label columns
-
     Args:
         data (list[Dataframes]): 5 trials of data of shape (M, 10)
-
     Returns:
         list[Dataframes]: 5 trials of data of shape (M, 14)
     """
@@ -111,8 +337,8 @@ def extract_joint_positions(data_all):
     left_joint_positions, right_joint_positions = [], []
     for data in data_all:
         # create joing position lists
-        left_joint_positions.append(data['leftJointPosition'])
-        right_joint_positions.append(data['rightJointPosition'])
+        left_joint_positions.append(data['lJPos'])
+        right_joint_positions.append(data['rJPos'])
     return left_joint_positions, right_joint_positions
 
 
@@ -127,7 +353,7 @@ def find_local_maximas(joint_positions):
     """
     # Peak detection using scipy.signal.find_peaks()
 
-    joint_positions = joint_positions.rolling(10).mean()  # smooth out the joint positions
+    # joint_positions = joint_positions.rolling(10).mean()  # smooth out the joint positions
     peaks, _ = find_peaks(joint_positions)  # find all extremas in the joint positions
 
     # find a list of prominences for all extremas
@@ -139,11 +365,10 @@ def find_local_maximas(joint_positions):
     #               height of peaks > mean(joint_positions)
     #               distance between peaks > 100 samples
     #               width of peak < mean + 4*std of width
-    maximas, _ = find_peaks(joint_positions, prominence=np.median(prominences)+np.var(prominences), 
-                            height=np.mean(joint_positions), distance=100,
-                            wlen=np.mean(width)+4*np.std(width))
-
-    return maximas
+    maximas, _ = find_peaks(joint_positions, 
+                            prominence=np.median(prominences)+np.var(prominences), 
+                            distance=150)
+    return maximas.tolist()
 
 
 def label_vectors(joint_positions):
@@ -193,7 +418,6 @@ def find_cutting_indices(left_data, right_data):
     for i in range(maximas.shape[0]-1):
         diff.append(maximas[i+1]-maximas[i])
     diff.append(0)
-
     cuts = maximas[diff > (2*np.std(diff)+np.mean(diff))]
     # Starting from peak 2
     peaks_ix = [maximas[1]]
@@ -225,7 +449,9 @@ def nn_extract_features(data_list, window_size, testing_trial):
     Y_train = np.zeros((1, 4))
     data_out = {}
     for i, data in enumerate(data_list):
+        # mode = data['nWalk']
         trial_X = data.iloc[:, :-4]
+        # trial_X = trial_X.drop(['nWalk'])
         trial_Y = data.iloc[:, -4:]
         if i+1 == testing_trial:
             feature_extracted_data = pd.DataFrame()
@@ -281,12 +507,10 @@ def nn_extract_features(data_list, window_size, testing_trial):
 
 def cnn_extract_features(data_list, window_size, testing_trial):
     """feature extraction for CNN and LSTM
-
     Args:
         data_list (list[DataFrames]): list of all data of shape (M, 14)
         window_size (int): window size
         testing_trial (int): between 1 - 10, represents the test trial
-
     Returns:
         dictionary: X_train, X_test - (M, window_size, 10); y_train, y_test - (M, 4)
     """
@@ -295,15 +519,17 @@ def cnn_extract_features(data_list, window_size, testing_trial):
     Y_test = np.zeros((1, 4))
     X_train = np.zeros((1, window_size, 10))
     Y_train = np.zeros((1, 4))
-    data_out = {}
+    mode = np.zeros((1, 1))
+    
     for i, data in enumerate(data_list):
-        data = data.to_numpy()
         if i+1 == testing_trial:
             # Generate Testing Data
             # raw gp%, not (x,y)
-            trial_X = data[:, :-4]
-            trial_Y = data[:, -4:]
-
+#             nWalk = data['nWalk']
+            trial_X = data.iloc[:, :-4]
+#             trial_X = trial_X.drop(['nWalk'])
+            trial_Y = data.iloc[:, -4:]
+            
             #Sliding window
             shape_des = (trial_X.shape[0] - window_size +
                          1, window_size, trial_X.shape[-1])
@@ -315,12 +541,8 @@ def cnn_extract_features(data_list, window_size, testing_trial):
 
             X_test = np.concatenate([X_test, trial_X], axis=0)
             Y_test = np.concatenate([Y_test, trial_Y], axis=0)
-
-            X_test = X_test[1:, :, :]
-            Y_test = Y_test[1:, :]
-
-            data_out['X_test'] = X_test
-            data_out['y_test'] = Y_test
+#             mode = np.concatenate([mode, nWalk], axis=0)
+            
 
         else:
             # Generate Training Data
@@ -338,10 +560,15 @@ def cnn_extract_features(data_list, window_size, testing_trial):
 
             X_train = np.concatenate([X_train, trial_X], axis=0)
             Y_train = np.concatenate([Y_train, trial_Y], axis=0)
-
+    
+    X_test = X_test[1:, :, :]
+    Y_test = Y_test[1:, :]
+#     nWalk = nWalk[1:, :]
     X_train = X_train[1:, :, :]
     Y_train = Y_train[1:, :]
-    data_out['X_train'] = X_train
-    data_out['y_train'] = Y_train
-
+    
+#     data_out = {'X_test': X_test, 'y_test': Y_test, 'X_train': X_train, 
+#                 'y_train': Y_train, 'mode': mode}
+    data_out = {'X_test': X_test, 'y_test': Y_test, 'X_train': X_train, 
+                'y_train': Y_train}
     return data_out
