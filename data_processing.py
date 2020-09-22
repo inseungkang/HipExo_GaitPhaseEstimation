@@ -1,6 +1,6 @@
 import math
 import glob
-import re, sys
+import re
 import pandas as pd
 import numpy as np
 import scipy
@@ -16,7 +16,7 @@ columns = ['lJPos', 'rJPos', 'lJVel', 'rJVel', 'lJTorque', 'rJTorque',
            'lRecvTorque', 'rRecvTorque', 'lStanceSwing', 'rStanceSwing', 'nWalk', 'lWalk', 'rWalk', 'none']
 sensors = ['lJPos', 'rJPos', 'lJVel',
            'rJVel', 'gyroX', 'gyroY', 'gyroZ', 'accX',
-           'accY', 'accZ', 'nWalk']
+           'accY', 'accZ', 'nWalk', 'lGC', 'rGC']
 
 def segment_data():
     """load and segment out data from each circuit and cutting out standing data
@@ -84,17 +84,13 @@ def find_standing_phase(data):
     return standing_indices
 
 def manual_label_data(subject):
-    """For each trial, plot the joint position and detected the peaks, when
-    click on the graph, the x-coordinate of the mouse click will be printed and the
-    plot will be closed. Then user need to enter "add {int: x-coord}" to add a
-    peak, "rm {int: x-coord}" to remove the nearest peak, or press enter to move on
-    to the next trial. 
-    A plot with both left and right joint will be displayed, when that plot is
-    closed, a file containing the labeled data will be saved to the
-    correspond subject's data folder.
+    """Label the data, and combine the data with the label columns
 
     Args:
-        subject (int): subject number
+        data (list[Dataframes]): 5 trials of data of shape (M, 10)
+
+    Returns:
+        list[Dataframes]: 5 trials of data of shape (M, 14)
     """
     def onclick(event):
         print(event.xdata)
@@ -114,9 +110,7 @@ def manual_label_data(subject):
         
         lJPos, rJPos = extract_joint_positions([data])
         lMaximas, rMaximas = find_local_maximas(lJPos[0]), find_local_maximas(rJPos[0])
-        
-        # Plot graph, onclick -> print x coordinate and close graph
-        # Get input from uesr to add peak, delete peak, or move on to the next plot
+         
         f = plt.figure(figsize=(10, 4))
         plt.title(file + ' Left')
         plt.plot(lJPos[0])
@@ -125,31 +119,25 @@ def manual_label_data(subject):
         plt.show()
         val = input("Press Enter if ok; \nType 'rm {int}' to remove a maxima; \nType 'add {int}' to add a maxima:\n")
         while val:
-            try:
-                plt.close()
-                val = val.split(' ')
-                if val[0] == 'rm': 
-                    closest = min(lMaximas, key=lambda x : abs(x-int(val[1])))
-                    lMaximas.remove(closest)
-                elif val[0] == 'add':
-                    lMaximas.append(int(val[1]))
-                    lMaximas.sort()
-                else: 
-                    print("Invalid Input!!!")
-                    raise Exception
-                f = plt.figure(figsize=(10, 4))
-                plt.title(file + ' Left')
-                plt.plot(lJPos[0])
-                plt.plot(lMaximas, [lJPos[0][i] for i in lMaximas], 'r*')
-                f.canvas.mpl_connect('button_press_event', onclick)
-                plt.show()
-                val = input("Press Enter if ok; \nType 'rm {int}' to remove a maxima; \nType 'add {int}' to add a maxima:\n")
+            plt.close()
+            val = val.split(' ')
+            if val[0] == 'rm': 
+                closest = min(lMaximas, key=lambda x : abs(x-int(val[1])))
+                lMaximas.remove(closest)
+            elif val[0] == 'add':
+                lMaximas.append(int(val[1]))
+                lMaximas.sort()
+            else: 
+                print("Invalid Input")
                 continue
-            except Exception:
-                print("Something went wrong >.<")
-                print(sys.exc_info())
-                val = input("Press Enter if ok; \nType 'rm {int}' to remove a maxima; \nType 'add {int}' to add a maxima:\n")
-                continue
+            f = plt.figure(figsize=(10, 4))
+            plt.title(file + ' Left')
+            plt.plot(lJPos[0])
+            plt.plot(lMaximas, [lJPos[0][i] for i in lMaximas], 'r*')
+            f.canvas.mpl_connect('button_press_event', onclick)
+            plt.show()
+            val = input("Press Enter if ok; \nType 'rm {int}' to remove a maxima; \nType 'add {int}' to add a maxima:\n")
+            continue
         
         f = plt.figure(figsize=(10, 4))
         plt.title(file + ' Right')
@@ -157,7 +145,6 @@ def manual_label_data(subject):
         plt.plot(rMaximas, [rJPos[0][i] for i in rMaximas], 'r*')
         f.canvas.mpl_connect('button_press_event', onclick)
         plt.show()
-        
         val = input("Press Enter if ok; \nType 'rm {int}' to remove a maxima; \nType 'add {int}' to add a maxima:\n")
         while val:
             try:
@@ -172,7 +159,7 @@ def manual_label_data(subject):
                     rMaximas.sort()
                     print(f"Added point " + val[1])
                 else: 
-                    print("Invalid Input!!!")
+                    print("Invalid Input")
                     continue
                 f = plt.figure(figsize=(10, 4))
                 plt.title(file + ' Right')
@@ -182,12 +169,10 @@ def manual_label_data(subject):
                 plt.show()
                 val = input("Press Enter if ok; \nType 'rm {int}' to remove a maxima; \nType 'add {int}' to add a maxima:\n")
                 continue
-            except Exception:
+            except:
                 print("Something went wrong >.<")
-                print(sys.exc_info())
-                val = input("Press Enter if ok; \nType 'rm {int}' to remove a maxima; \nType 'add {int}' to add a maxima:\n")
                 continue
-        # Mark label as 1 at maximas and 0 at maxima+1
+
         lY = pd.Series(np.nan, index=range(0, data.shape[0]))
         rY = pd.Series(np.nan, index=range(0, data.shape[0]))
         for maxima in lMaximas:
@@ -197,9 +182,6 @@ def manual_label_data(subject):
             rY[maxima] = 1
             rY[maxima+1] = 0
         
-        # Linearly interpolate the labels between every 0 and 1 and fill in the
-        # rest with 0's
-        # Conver to polar coordinates
         lY.interpolate(inplace=True), rY.interpolate(inplace=True)
         lY.fillna(0, inplace=True), rY.fillna(0, inplace=True)
         ly_theta, ry_theta = lY * 2 * np.pi, rY * 2 * np.pi
@@ -211,21 +193,8 @@ def manual_label_data(subject):
         # Combine the data and the labels
         data[labels.columns] = labels
         all_maximas = sorted(lMaximas + rMaximas)
-        all_maximas = all_maximas[1:-1]
-        
-        if lMaximas[0]<rMaximas[0]: 
-            lMaximas = lMaximas[1:]  
-        else: 
-            rMaximas = rMaximas[1:]
-        
-        if lMaximas[-1]>rMaximas[-1]: 
-            lMaximas = lMaximas[:-1] 
-        else: 
-            rMaximas = rMaximas[:-1]
-        
         data = data.iloc[all_maximas[0]:all_maximas[-1]+1, :]
         
-        # Plot both left and right joint as well as the final peaks
         f = plt.figure(figsize=(10, 7))
         plt.subplot(211)
         plt.title(file + ' Left')
@@ -241,9 +210,8 @@ def manual_label_data(subject):
         
         f.canvas.mpl_connect('button_press_event', onclick)
         plt.show()
-        
-        # Save the labeled data file to the corresponding folder
-        # Each file should be shape (M, 15) -> 10 sensors + nWalk + 4 labels
+        data.drop(columns=['lGC', 'rGC'], inplace = True)
+        print(data.info())
         np.savetxt(file[:10] + 'labeled_' + file[10:-4], data)
         print("You just finihsed 1 trial! Yay!")
         print("Labeled file saved as " + file[:10] + 'labeled_' + file[10:-4] + "\n\n")
@@ -525,9 +493,9 @@ def cnn_extract_features(data_list, window_size, testing_trial):
         if i+1 == testing_trial:
             # Generate Testing Data
             # raw gp%, not (x,y)
-#             nWalk = data['nWalk']
+            nWalk = data['nWalk']
             trial_X = data.iloc[:, :-4]
-#             trial_X = trial_X.drop(['nWalk'])
+            trial_X = trial_X.drop(['nWalk'])
             trial_Y = data.iloc[:, -4:]
             
             #Sliding window
@@ -541,7 +509,7 @@ def cnn_extract_features(data_list, window_size, testing_trial):
 
             X_test = np.concatenate([X_test, trial_X], axis=0)
             Y_test = np.concatenate([Y_test, trial_Y], axis=0)
-#             mode = np.concatenate([mode, nWalk], axis=0)
+            mode = np.concatenate([mode, nWalk], axis=0)
             
 
         else:
@@ -563,12 +531,10 @@ def cnn_extract_features(data_list, window_size, testing_trial):
     
     X_test = X_test[1:, :, :]
     Y_test = Y_test[1:, :]
-#     nWalk = nWalk[1:, :]
+    nWalk = nWalk[1:, :]
     X_train = X_train[1:, :, :]
     Y_train = Y_train[1:, :]
     
-#     data_out = {'X_test': X_test, 'y_test': Y_test, 'X_train': X_train, 
-#                 'y_train': Y_train, 'mode': mode}
     data_out = {'X_test': X_test, 'y_test': Y_test, 'X_train': X_train, 
-                'y_train': Y_train}
+                'y_train': Y_train, 'mode': mode}
     return data_out
