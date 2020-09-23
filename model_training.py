@@ -121,7 +121,6 @@ def train_models(model_type, hyperparameter_configs, data_list):
         current_result['right_validation_rmse'] = []
         for test_trial in np.arange(1,11):
             dataset = get_dataset(model_type, data_list, model_config['window_size'], test_trial)
-            print(dataset['X_train'].shape)
             model = create_model(model_config, dataset)
             model.summary()
             early_stopping_callback = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=0)
@@ -351,3 +350,183 @@ def results_mapper(x):
     out['left_rmse_mean'] = x['left_rmse_mean']
     out['right_rmse_mean'] = x['right_rmse_mean']
     return out
+
+
+def get_model_configs_subject(hyperparam_space):
+    model_configs = []
+    model_type = hyperparam_space['model']
+    for subject in hyperparam_space['subject']:
+        for fold in hyperparam_space['fold']:
+            for window_size in hyperparam_space['window_size']:
+                if (model_type != 'mlp'):
+                    type_specific_params = list(hyperparam_space[model_type].keys())
+
+                    type_specific_possibilities = []
+
+                    for param in type_specific_params:
+                        type_specific_possibilities.append(hyperparam_space[model_type][param])
+
+                    type_specific_config_tuples = itertools.product(*type_specific_possibilities)
+                    type_specific_configs = []
+                    for config in type_specific_config_tuples:
+                        type_specific_config = {}
+                        for i, value in enumerate(config):
+                            type_specific_config[type_specific_params[i]] = value
+                        type_specific_configs.append(type_specific_config)
+
+                dense_params = list(hyperparam_space['dense'].keys())
+
+                dense_possibilities = []
+
+                for param in dense_params:
+                    dense_possibilities.append(hyperparam_space['dense'][param])
+
+                dense_config_tuples = itertools.product(*dense_possibilities)
+                dense_configs = []
+                for config in dense_config_tuples:
+                    dense_config = {}
+                    for i, value in enumerate(config):
+                        dense_config[dense_params[i]] = value
+                    dense_configs.append(dense_config)
+
+                optim_params = list(hyperparam_space['optimizer'].keys())
+
+                optim_possibilities = []
+
+                for param in optim_params:
+                    optim_possibilities.append(hyperparam_space['optimizer'][param])
+
+                optim_config_tuples = itertools.product(*optim_possibilities)
+                optim_configs = []
+                for config in optim_config_tuples:
+                    optim_config = {}
+                    for i, value in enumerate(config):
+                        optim_config[optim_params[i]] = value
+                    optim_configs.append(optim_config)
+                    
+                training_params = list(hyperparam_space['training'].keys())
+
+                training_possibilities = []
+
+                for param in training_params:
+                    training_possibilities.append(hyperparam_space['training'][param])
+
+                training_config_tuples = itertools.product(*training_possibilities)
+                training_configs = []
+                for config in training_config_tuples:
+                    training_config = {}
+                    for i, value in enumerate(config):
+                        training_config[training_params[i]] = value
+                    training_configs.append(training_config)
+                
+                if model_type != 'mlp':
+                    possible_configs = itertools.product(type_specific_configs, dense_configs, optim_configs, training_configs)
+                    config_count = 0
+                    for config in possible_configs:
+                        config_count += 1
+                        config_obj = {
+                            'subject': subject,
+                            'fold': fold,
+                            'window_size': window_size,
+                            'model': model_type,
+                            'dense': config[1],
+                            'optimizer': config[2],
+                            'training': config[3]
+                        }
+                        config_obj[model_type] = config[0]
+                        model_configs.append(config_obj)
+                else:
+                    possible_configs = itertools.product(dense_configs, optim_configs, training_configs)
+                    config_count = 0
+                    for config in possible_configs:
+                        config_count += 1
+                        config_obj = {
+                            'subject': subject,
+                            'fold': fold,
+                            'window_size': window_size,
+                            'model': model_type,
+                            'dense': config[0],
+                            'optimizer': config[1],
+                            'training': config[2]
+                        }
+                        model_configs.append(config_obj)
+
+    return model_configs
+
+
+def train_models_subject(model_type, hyperparameter_configs, data):
+    results = []
+    for model_config in hyperparameter_configs:
+        current_result = {}
+        current_result['model_config'] = model_config
+        current_result['left_validation_rmse'] = []
+        current_result['right_validation_rmse'] = []
+        subject = model_config['subject']
+        subject_data = data[f'AB{subject:02d}']
+        # NOTE: This is assuming that for each subject, CW and CCW have
+        #       number of trials, will need to change this if that's not 
+        #       garuateed to be the case anymore.
+        test_trial_num = np.arange(1, len(subject_data['CW'])+1)
+        for test_trial in test_trial_num:
+            dataset = get_dataset_subject(model_type, subject_data, model_config['window_size'], test_trial, model_config['fold'])
+            model = create_model(model_config, dataset)
+            model.summary()
+            early_stopping_callback = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=0)
+            model_hist = model.fit(dataset['X_train'], dataset['y_train'], verbose=1, validation_split=0.2, shuffle=True, callbacks= [early_stopping_callback], **model_config['training'])
+
+            predictions = model.predict(dataset['X_test'])
+            left_rmse, right_rmse = custom_rmse(dataset['y_test'], predictions)
+
+            current_result['left_validation_rmse'].append(left_rmse)
+            current_result['right_validation_rmse'].append(right_rmse)
+            clear_session()
+        results.append(current_result)
+    
+    per_trial_results = []
+    for trial in results:
+        left_val_rmse = trial['left_validation_rmse']
+        right_val_rmse = trial['right_validation_rmse']
+        for i in test_trial_num:
+            trial_result = {}
+            trial_result['trial'] = i
+            trial_result['window_size'] = trial['model_config']['window_size']
+            
+            if (model_type != 'mlp'):
+                for key in trial['model_config'][model_type].keys():
+                    trial_result['{}_{}'.format(model_type, key)] = trial['model_config'][model_type][key]
+
+            for key in trial['model_config']['dense'].keys():
+                trial_result['dense_{}'.format(key)] = trial['model_config']['dense'][key]
+
+            for key in trial['model_config']['optimizer'].keys():
+                trial_result['optim_{}'.format(key)] = trial['model_config']['optimizer'][key]
+
+            for key in trial['model_config']['training'].keys():
+                trial_result['training_{}'.format(key)] = trial['model_config']['training'][key]
+            trial_result['left_validation_rmse'] = left_val_rmse[i-1]
+            trial_result['right_validation_rmse'] = right_val_rmse[i-1]
+            per_trial_results.append(trial_result)
+    df_per_trial_results = pd.DataFrame(per_trial_results)
+
+    for model in results:
+        model['left_rmse_mean'] = np.mean(model['left_validation_rmse'])
+        model['right_rmse_mean'] = np.mean(model['right_validation_rmse'])
+                
+    averaged_results = list(map(results_mapper, results))
+    df_results = pd.DataFrame(averaged_results)
+    return (df_per_trial_results, df_results)
+
+def get_dataset_subject(model_type, data_list, window_size, test_trial, fold):
+    if model_type == 'cnn':
+        return cnn_extract_features_subject(data_list, window_size, test_trial, fold)
+    elif model_type == 'lstm':
+        dataset = cnn_extract_features_subject(data_list, window_size, test_trial, fold)
+        dataset['X_train'] = dataset['X_train'].squeeze()
+        dataset['y_train'] = dataset['y_train'].squeeze()
+        dataset['X_test'] = dataset['X_test'].squeeze()
+        dataset['y_test'] = dataset['y_test'].squeeze()
+        return dataset
+    elif model_type == 'mlp':
+        return nn_extract_features_subject(data_list, window_size, test_trial, fold)
+    else:
+        raise Exception('No dataset for model type')

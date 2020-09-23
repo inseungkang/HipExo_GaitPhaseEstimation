@@ -441,3 +441,180 @@ def cnn_extract_features(data_list, window_size, testing_trial):
     data_out['y_train'] = Y_train
 
     return data_out
+
+
+def nn_extract_features_subject(subject_data, window_size, test_trial, fold):
+    
+    if fold == 'pair':
+        testing_data = []
+        training_data = []
+        for condition in subject_data.keys():
+            testing_data.append(subject_data[condition][test_trial-1])
+            training_data += [x for i, x in enumerate(subject_data[condition]) if i != test_trial-1] 
+        
+    X_test = np.zeros((1, 50))
+    Y_test = np.zeros((1, 4))
+    X_train = np.zeros((1, 50))
+    Y_train = np.zeros((1, 4))
+    mode = np.zeros((1))
+    data_out = {}
+    
+    # Generate testing data
+    for i, data in enumerate(testing_data):
+        if 'nWalk' in data.columns:
+            nWalk = data['nWalk']
+            data = data.drop(columns='nWalk')
+ 
+        trial_X = data.iloc[:, :-4]
+        trial_Y = data.iloc[:, -4:]
+
+        feature_extracted_data = pd.DataFrame()
+        for ix, column in enumerate(trial_X.columns):
+            single_column = trial_X.iloc[:, i].values
+            shape_des = single_column.shape[:-1] + \
+                (single_column.shape[-1] - window_size + 1, window_size)
+            strides_des = single_column.strides + (single_column.strides[-1],)
+
+            sliding_window = np.lib.stride_tricks.as_strided(
+                single_column, shape=shape_des, strides=strides_des)
+            sliding_window_df = pd.DataFrame(sliding_window)
+
+            min_series = sliding_window_df.min(axis=1)
+            max_series = sliding_window_df.max(axis=1)
+            mean_series = sliding_window_df.mean(axis=1)
+            std_series = sliding_window_df.std(axis=1)
+            last_series = sliding_window_df.iloc[:, -1]
+
+            feature_extracted_data = pd.concat([feature_extracted_data, round(min_series, 4), round(max_series, 4), round(
+                mean_series, 4), round(std_series, 4), round(last_series, 4)], axis=1, ignore_index=True)
+        if nWalk is not None:
+            nWalk = nWalk.iloc[window_size-1:].to_numpy()
+            mode = np.concatenate([mode, nWalk])
+        trial_Y = trial_Y.iloc[window_size-1:].to_numpy()
+        X_test = np.concatenate([X_test, feature_extracted_data], axis=0)
+        Y_test = np.concatenate([Y_test, trial_Y], axis=0)
+    X_test = X_test[1:, :]
+    Y_test = Y_test[1:, :]
+    data_out['X_test'] = X_test
+    data_out['y_test'] = Y_test
+    if len(mode) > 1:
+        mode = mode[1:]
+        data_out['mode'] = mode
+    
+    # Generate training data
+    for i, data in enumerate(training_data):
+        if 'nWalk' in data.columns:
+            data = data.drop(columns='nWalk')
+        trial_X = data.iloc[:, :-4]
+        trial_Y = data.iloc[:, -4:]
+
+        feature_extracted_data = pd.DataFrame()
+        for ix, column in enumerate(trial_X.columns):
+            single_column = trial_X.iloc[:, i].values
+            shape_des = single_column.shape[:-1] + \
+                (single_column.shape[-1] - window_size + 1, window_size)
+            strides_des = single_column.strides + (single_column.strides[-1],)
+
+            sliding_window = np.lib.stride_tricks.as_strided(
+                single_column, shape=shape_des, strides=strides_des)
+            sliding_window_df = pd.DataFrame(sliding_window)
+
+            min_series = sliding_window_df.min(axis=1)
+            max_series = sliding_window_df.max(axis=1)
+            mean_series = sliding_window_df.mean(axis=1)
+            std_series = sliding_window_df.std(axis=1)
+            last_series = sliding_window_df.iloc[:, -1]
+
+            feature_extracted_data = pd.concat([feature_extracted_data, round(min_series, 4), round(max_series, 4), round(
+                mean_series, 4), round(std_series, 4), round(last_series, 4)], axis=1, ignore_index=True)
+        trial_Y = trial_Y.iloc[window_size-1:].to_numpy()
+        X_train = np.concatenate([X_train, feature_extracted_data], axis=0)
+        Y_train = np.concatenate([Y_train, trial_Y], axis=0)
+    X_train = X_train[1:, :]
+    Y_train = Y_train[1:, :]
+    data_out['X_train'] = X_train
+    data_out['y_train'] = Y_train
+    
+    return data_out
+
+
+def cnn_extract_features_subject(subject_data, window_size, test_trial, fold):
+    if fold == 'pair':
+        testing_data = []
+        training_data = []
+        for condition in subject_data.keys():
+            testing_data.append(subject_data[condition][test_trial-1])
+            training_data += [x for i, x in enumerate(subject_data[condition]) if i != test_trial-1]
+            
+    X_test = np.zeros((1, window_size, 10))
+    Y_test = np.zeros((1, 4))
+    X_train = np.zeros((1, window_size, 10))
+    Y_train = np.zeros((1, 4))
+    mode = np.zeros((1))
+    data_out = {}
+    
+    # Generate testing data
+    for i, data in enumerate(testing_data):
+        if 'nWalk' in data.columns:
+            nWalk = data['nWalk']
+            data = data.drop(columns='nWalk')
+
+        data = data.to_numpy()
+        
+        trial_X = data[:, :-4]
+        trial_Y = data[:, -4:]
+        
+        #Sliding window
+        shape_des = (trial_X.shape[0] - window_size +
+                    1, window_size, trial_X.shape[-1])
+        strides_des = (
+            trial_X.strides[0], trial_X.strides[0], trial_X.strides[1])
+        trial_X = np.lib.stride_tricks.as_strided(trial_X, shape=shape_des,
+                                                strides=strides_des)
+            
+        trial_Y = trial_Y[window_size-1:]
+
+        X_test = np.concatenate([X_test, trial_X], axis=0)
+        Y_test = np.concatenate([Y_test, trial_Y], axis=0)
+        if nWalk is not None:
+            nWalk = nWalk.iloc[window_size-1:].to_numpy()
+            mode = np.concatenate([mode, nWalk])
+    
+    X_test = X_test[1:, :, :]
+    Y_test = Y_test[1:, :]
+
+    data_out['X_test'] = X_test
+    data_out['y_test'] = Y_test
+
+    if len(mode) > 1:
+        mode = mode[1:]
+        data_out['mode'] = mode
+    
+    # Generate Training Data
+    for i, data in enumerate(training_data):
+        if 'nWalk' in data.columns:
+            data = data.drop(columns='nWalk')
+        
+        data = data.to_numpy()
+        
+        trial_X = data[:, :-4]
+        trial_Y = data[:, -4:]
+
+        #Sliding window
+        shape_des = (trial_X.shape[0] - window_size +
+                        1, window_size, trial_X.shape[-1])
+        strides_des = (
+            trial_X.strides[0], trial_X.strides[0], trial_X.strides[1])
+        trial_X = np.lib.stride_tricks.as_strided(trial_X, shape=shape_des,
+                                                    strides=strides_des)
+        trial_Y = trial_Y[window_size-1:]
+
+        X_train = np.concatenate([X_train, trial_X], axis=0)
+        Y_train = np.concatenate([Y_train, trial_Y], axis=0)
+
+    X_train = X_train[1:, :, :]
+    Y_train = Y_train[1:, :]
+    data_out['X_train'] = X_train
+    data_out['y_train'] = Y_train
+
+    return data_out
