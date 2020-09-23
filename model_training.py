@@ -334,6 +334,7 @@ def results_mapper(x):
     out['window_size'] = x['model_config']['window_size']
     model_type = x['model_config']['model']
     out['model_type'] = model_type
+    out['subject'] = x['model_config']['subject']
     if model_type != 'mlp':
         for key in x['model_config'][model_type].keys():
             out['{}_{}'.format(model_type, key)] = x['model_config'][model_type][key]
@@ -490,7 +491,8 @@ def train_models_subject(model_type, hyperparameter_configs, data):
             trial_result = {}
             trial_result['trial'] = i
             trial_result['window_size'] = trial['model_config']['window_size']
-            
+            trial_result['subject'] = trial['model_config']['subject']
+
             if (model_type != 'mlp'):
                 for key in trial['model_config'][model_type].keys():
                     trial_result['{}_{}'.format(model_type, key)] = trial['model_config'][model_type][key]

@@ -10,28 +10,28 @@ tf.random.set_seed(seed=5)
 
 subjects = np.arange(1, 11)
 
-# # CNN Model
-# hyperparam_space = {
-#     'subject': subjects,
-#     'fold': ['pair'],
-#     'window_size': [100],
-#     'model': 'cnn',
-#     'cnn': {
-#       'kernel_size': [10],
-#       'activation': ['relu']
-#     },
-#     'dense': {
-#         'activation': ['tanh']
-#     },
-#     'optimizer': {
-#         'loss': ['mean_absolute_error'],
-#         'optimizer': ['adam']
-#     },
-#     'training': {
-#         'epochs': [10],
-#         'batch_size': [128]
-#     }
-# }
+# CNN Model
+hyperparam_space = {
+    'subject': subjects,
+    'fold': ['pair'],
+    'window_size': [100],
+    'model': 'cnn',
+    'cnn': {
+      'kernel_size': [10],
+      'activation': ['relu']
+    },
+    'dense': {
+        'activation': ['tanh']
+    },
+    'optimizer': {
+        'loss': ['mean_absolute_error'],
+        'optimizer': ['adam']
+    },
+    'training': {
+        'epochs': [10],
+        'batch_size': [128]
+    }
+}
 
 # # MLP Model
 # hyperparam_space = {
@@ -82,3 +82,5 @@ hyperparameter_configs = get_model_configs_subject(hyperparam_space)
 data = import_subject_data(subjects)
 
 trial_results, average_results = train_models_subject(hyperparam_space['model'], hyperparameter_configs, data)
+trial_results.to_csv('trial_results.csv')
+average_results.to_csv('average_results.csv')
