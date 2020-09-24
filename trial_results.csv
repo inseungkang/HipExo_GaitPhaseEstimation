@@ -1,0 +1,6 @@
+trial,window_size,cnn_kernel_size,cnn_activation,dense_activation,optim_loss,optim_optimizer,training_epochs,training_batch_size,left_validation_rmse,right_validation_rmse
+0,100,20,relu,tanh,mean_absolute_error,Adam,200,128,8.152879725906086,5.3378117804745635
+1,100,20,relu,tanh,mean_absolute_error,Adam,200,128,6.892839214240468,8.074088147833086
+2,100,20,relu,tanh,mean_absolute_error,Adam,200,128,9.715240513223584,6.310811861175027
+3,100,20,relu,tanh,mean_absolute_error,Adam,200,128,9.482748673103075,10.800066639519079
+4,100,20,relu,tanh,mean_absolute_error,Adam,200,128,21.97977548166104,19.86037765784252

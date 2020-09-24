@@ -112,6 +112,22 @@ def get_model_configs(hyperparam_space):
 #  trials in the dataset. For each configuration, there
 #  will be K estimates of performance, each from a
 #  Leave-one-trial-out approach
+def train_final_model(model_type, hyperparameter_configs, data_list, test_trial):
+    for model_config in hyperparameter_configs:
+        current_result = {}
+        current_result['model_config'] = model_config
+        current_result['left_validation_rmse'] = []
+        current_result['right_validation_rmse'] = []
+        
+        dataset = get_dataset(model_type, data_list, model_config['window_size'], test_trial)
+        print(dataset['X_train'].shape)
+        model = create_model(model_config, dataset)
+        model.summary()
+        early_stopping_callback = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=0)
+        model_hist = model.fit(dataset['X_train'], dataset['y_train'], verbose=1, validation_split=0.2, shuffle=True, callbacks= [early_stopping_callback], **model_config['training'])
+
+    return model, dataset
+
 def train_models(model_type, hyperparameter_configs, data_list):
     results = []
     for model_config in hyperparameter_configs:
@@ -172,6 +188,7 @@ def train_models(model_type, hyperparameter_configs, data_list):
 
 # Retrieve the appropriate dataset & train/test split
 #  based on the model, test trial, and window set
+
 def get_dataset(model_type, data_list, window_size, test_trial):
     if model_type == 'cnn':
         return cnn_extract_features(data_list, window_size, test_trial)
