@@ -1,8 +1,8 @@
 from data_cleaning import *
 
 # segment_data()
-# manual_scrap_data(1)
-manual_label_chopped_data(1)
+# manual_scrap_data(5)
+manual_label_chopped_data(5)
 
 # from model_training import *
 # from data_processing import *
