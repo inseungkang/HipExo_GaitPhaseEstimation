@@ -84,29 +84,33 @@ def find_standing_phase(data):
     standing_indices = np.sort(np.hstack([begin, end]))
     return standing_indices
 
-def import_subject_data(subject_list):
+def import_subject_data(subject_list, trial_list):
     """ import data and organize them based on subject and direction (CW/CCW)
 
     Args:
         subject_list (list[int]): a list of subject numbers
 
     Returns:
-        dict{dict{list{DataFrames}}}: ex: data = {'AB01': {'CW': [dataframe,
-        ...], 'CCW': [dataframe, ...]}, 'AB02': {...} }
+        dict{dict{dict{list[DataFrames]}}}: ex: data = {'AB01': {'ZICW': {1: [dataframe,
+        ...], 2: [dataframe, ...]}, 'BTCCW': {1: [dataframe, ...]}, 'AB02': {...} }
     """
     
     data = {}
     for subject in subject_list:
         subject_data = {}
-        for condition in ['CW', 'CCW']:
-            file_path = f'data/AB{subject:02d}/labeled_' + condition + '*ZI*'
-            # Read data
-            data_list = []
-            for file in sorted(glob.glob(file_path)):
-                trial_data = np.loadtxt(file)
-                trial_data = pd.DataFrame(trial_data, columns=sensors+gait_phase)
-                data_list.append(trial_data)
-            subject_data[condition] = data_list
+        for condition in ['ZI', 'BT']:
+            for direction in ['CW', 'CCW']:
+                trial_dict = {}
+                for trial in trial_list:
+                    file_path = f'data/AB{subject:02d}/labeled*_' + direction + '_' + condition + '_' + str(trial) + '*'
+                    # Read data
+                    data_list = []
+                    for file in sorted(glob.glob(file_path)):
+                        trial_data = np.loadtxt(file)
+                        trial_data = pd.DataFrame(trial_data, columns=sensors+gait_phase)
+                        data_list.append(trial_data)
+                    trial_dict[trial] = data_list
+                subject_data[condition+direction] = trial_dict
         data[f'AB{subject:02d}'] = subject_data
     return data
 
@@ -445,12 +449,25 @@ def cnn_extract_features(data_list, window_size, testing_trial):
 
 def nn_extract_features_subject(subject_data, window_size, test_trial, fold):
     
-    if fold == 'pair':
-        testing_data = []
-        training_data = []
+    testing_data = []
+    training_data = []  
+    if fold == 'ZI':
+        for condition in ['ZICW','ZICCW']:
+            for trial in subject_data[condition].keys():
+                if trial == test_trial:
+                    testing_data.extend(subject_data[condition][trial])
+                else:
+                    training_data.extend(subject_data[condition][trial])
+    elif fold == 'BT':
         for condition in subject_data.keys():
-            testing_data.append(subject_data[condition][test_trial-1])
-            training_data += [x for i, x in enumerate(subject_data[condition]) if i != test_trial-1] 
+            for trial in subject_data[condition].keys():
+                if condition in ['BTCW', 'BTCCW']:
+                    if trial == test_trial:
+                        testing_data.extend(subject_data[condition][trial])
+                    else:
+                        training_data.extend(subject_data[condition][trial])
+                else:
+                    training_data.extend(subject_data[condition][trial])
         
     X_test = np.zeros((1, 50))
     Y_test = np.zeros((1, 4))
@@ -470,7 +487,7 @@ def nn_extract_features_subject(subject_data, window_size, test_trial, fold):
 
         feature_extracted_data = pd.DataFrame()
         for ix, column in enumerate(trial_X.columns):
-            single_column = trial_X.iloc[:, i].values
+            single_column = trial_X.iloc[:, ix].values
             shape_des = single_column.shape[:-1] + \
                 (single_column.shape[-1] - window_size + 1, window_size)
             strides_des = single_column.strides + (single_column.strides[-1],)
@@ -510,7 +527,7 @@ def nn_extract_features_subject(subject_data, window_size, test_trial, fold):
 
         feature_extracted_data = pd.DataFrame()
         for ix, column in enumerate(trial_X.columns):
-            single_column = trial_X.iloc[:, i].values
+            single_column = trial_X.iloc[:, ix].values
             shape_des = single_column.shape[:-1] + \
                 (single_column.shape[-1] - window_size + 1, window_size)
             strides_des = single_column.strides + (single_column.strides[-1],)
@@ -534,17 +551,29 @@ def nn_extract_features_subject(subject_data, window_size, test_trial, fold):
     Y_train = Y_train[1:, :]
     data_out['X_train'] = X_train
     data_out['y_train'] = Y_train
-    
     return data_out
 
 
 def cnn_extract_features_subject(subject_data, window_size, test_trial, fold):
-    if fold == 'pair':
-        testing_data = []
-        training_data = []
+    testing_data = []
+    training_data = []  
+    if fold == 'ZI':
+        for condition in ['ZICW','ZICCW']:
+            for trial in subject_data[condition].keys():
+                if trial == test_trial:
+                    testing_data.extend(subject_data[condition][trial])
+                else:
+                    training_data.extend(subject_data[condition][trial])
+    elif fold == 'BT':
         for condition in subject_data.keys():
-            testing_data.append(subject_data[condition][test_trial-1])
-            training_data += [x for i, x in enumerate(subject_data[condition]) if i != test_trial-1]
+            for trial in subject_data[condition].keys():
+                if condition in ['BTCW', 'BTCCW']:
+                    if trial == test_trial:
+                        testing_data.extend(subject_data[condition][trial])
+                    else:
+                        training_data.extend(subject_data[condition][trial])
+                else:
+                    training_data.extend(subject_data[condition][trial])
             
     X_test = np.zeros((1, window_size, 10))
     Y_test = np.zeros((1, 4))
@@ -616,5 +645,4 @@ def cnn_extract_features_subject(subject_data, window_size, test_trial, fold):
     Y_train = Y_train[1:, :]
     data_out['X_train'] = X_train
     data_out['y_train'] = Y_train
-
     return data_out
