@@ -276,7 +276,166 @@ def manual_scrap_data(subject):
 				clip = data.loc[start:end]
 
 				# Save all data for this trial
-				np.savetxt(file[:10] + 'chopped_' + file[10:-4] + '_clip_{}'.format(i), data)
+				np.savetxt(file[:10] + 'chopped_' + file[10:-4] + '_clip_{}'.format(i), clip)
 				print('Saved')
 
 		print('Done with a trial!')
+
+def manual_label_chopped_data(subject):
+    """For each trial, plot the joint position and detected the peaks, when
+    click on the graph, the x-coordinate of the mouse click will be printed and the
+    plot will be closed. Then user need to enter "add {int: x-coord}" to add a
+    peak, "rm {int: x-coord}" to remove the nearest peak, or press enter to move on
+    to the next trial. 
+    A plot with both left and right joint will be displayed, when that plot is
+    closed, a file containing the labeled data will be saved to the
+    correspond subject's data folder.
+
+    Args:
+        subject (int): subject number
+    """
+    def onclick(event):
+        print(event.xdata)
+        plt.close()
+    
+    file_path = f'data/AB{subject:02d}/chopped' + "*" + "BT*"
+    # Read data
+    for file in sorted(glob.glob(file_path)):
+        data = np.loadtxt(file)
+        data = pd.DataFrame(data, columns=sensors)
+        
+        lJPos, rJPos = extract_joint_positions([data])
+        lMaximas, rMaximas = find_local_maximas(lJPos[0]), find_local_maximas(rJPos[0])
+        
+        # Plot graph, onclick -> print x coordinate and close graph
+        # Get input from uesr to add peak, delete peak, or move on to the next plot
+        f = plt.figure(figsize=(10, 4))
+        plt.title(file + ' Left')
+        plt.plot(lJPos[0])
+        plt.plot(lMaximas, [lJPos[0][i] for i in lMaximas], 'r*')
+        f.canvas.mpl_connect('button_press_event', onclick)
+        plt.show()
+        val = input("Press Enter if ok; \nType 'rm {int}' to remove a maxima; \nType 'add {int}' to add a maxima:\n")
+        while val:
+            try:
+                plt.close()
+                val = val.split(' ')
+                if val[0] == 'rm': 
+                    closest = min(lMaximas, key=lambda x : abs(x-int(val[1])))
+                    lMaximas.remove(closest)
+                elif val[0] == 'add':
+                    lMaximas.append(int(val[1]))
+                    lMaximas.sort()
+                else: 
+                    print("Invalid Input!!!")
+                    raise Exception
+                f = plt.figure(figsize=(10, 4))
+                plt.title(file + ' Left')
+                plt.plot(lJPos[0])
+                plt.plot(lMaximas, [lJPos[0][i] for i in lMaximas], 'r*')
+                f.canvas.mpl_connect('button_press_event', onclick)
+                plt.show()
+                val = input("Press Enter if ok; \nType 'rm {int}' to remove a maxima; \nType 'add {int}' to add a maxima:\n")
+                continue
+            except Exception:
+                print("Something went wrong >.<")
+                print(sys.exc_info())
+                val = input("Press Enter if ok; \nType 'rm {int}' to remove a maxima; \nType 'add {int}' to add a maxima:\n")
+                continue
+        
+        f = plt.figure(figsize=(10, 4))
+        plt.title(file + ' Right')
+        plt.plot(rJPos[0])
+        plt.plot(rMaximas, [rJPos[0][i] for i in rMaximas], 'r*')
+        f.canvas.mpl_connect('button_press_event', onclick)
+        plt.show()
+        
+        val = input("Press Enter if ok; \nType 'rm {int}' to remove a maxima; \nType 'add {int}' to add a maxima:\n")
+        while val:
+            try:
+                plt.close()
+                val = val.split(' ')
+                if val[0] == 'rm': 
+                    closest = min(rMaximas, key=lambda x : abs(x-int(val[1])))
+                    rMaximas.remove(closest)
+                    print(f"Removed point {closest}")
+                elif val[0] == 'add':
+                    rMaximas.append(int(val[1]))
+                    rMaximas.sort()
+                    print(f"Added point " + val[1])
+                else: 
+                    print("Invalid Input!!!")
+                    continue
+                f = plt.figure(figsize=(10, 4))
+                plt.title(file + ' Right')
+                plt.plot(rJPos[0])
+                plt.plot(rMaximas, [rJPos[0][i] for i in rMaximas], 'r*')
+                f.canvas.mpl_connect('button_press_event', onclick)
+                plt.show()
+                val = input("Press Enter if ok; \nType 'rm {int}' to remove a maxima; \nType 'add {int}' to add a maxima:\n")
+                continue
+            except Exception:
+                print("Something went wrong >.<")
+                print(sys.exc_info())
+                val = input("Press Enter if ok; \nType 'rm {int}' to remove a maxima; \nType 'add {int}' to add a maxima:\n")
+                continue
+        # Mark label as 1 at maximas and 0 at maxima+1
+        lY = pd.Series(np.nan, index=range(0, data.shape[0]))
+        rY = pd.Series(np.nan, index=range(0, data.shape[0]))
+        for maxima in lMaximas:
+            lY[maxima] = 1
+            lY[maxima+1] = 0
+        for maxima in rMaximas:
+            rY[maxima] = 1
+            rY[maxima+1] = 0
+        
+        # Linearly interpolate the labels between every 0 and 1 and fill in the
+        # rest with 0's
+        # Conver to polar coordinates
+        lY.interpolate(inplace=True), rY.interpolate(inplace=True)
+        lY.fillna(0, inplace=True), rY.fillna(0, inplace=True)
+        ly_theta, ry_theta = lY * 2 * np.pi, rY * 2 * np.pi
+        left_x, left_y = np.cos(ly_theta), np.sin(ly_theta)
+        right_x, right_y = np.cos(ry_theta), np.sin(ry_theta)
+        labels = pd.DataFrame({'leftGaitPhaseX': left_x, 'leftGaitPhaseY': left_y,
+                                 'rightGaitPhaseX': right_x, 'rightGaitPhaseY': right_y})
+        
+        # Combine the data and the labels
+        data[labels.columns] = labels
+        all_maximas = sorted(lMaximas + rMaximas)
+        all_maximas = all_maximas[1:-1]
+        
+        if lMaximas[0]<rMaximas[0]: 
+            lMaximas = lMaximas[1:]  
+        else: 
+            rMaximas = rMaximas[1:]
+        
+        if lMaximas[-1]>rMaximas[-1]: 
+            lMaximas = lMaximas[:-1] 
+        else: 
+            rMaximas = rMaximas[:-1]
+        
+        data = data.iloc[all_maximas[0]:all_maximas[-1]+1, :]
+        
+        # Plot both left and right joint as well as the final peaks
+        f = plt.figure(figsize=(10, 7))
+        plt.subplot(211)
+        plt.title(file + ' Left')
+        plt.plot(data['lJPos'])
+        # plt.vlines([i for i, v in enumerate(data['lGC']) if v == 0], -1, 1, 'r')
+        plt.plot(lMaximas, [data['lJPos'][i] for i in lMaximas], 'r*')
+
+        plt.subplot(212)
+        plt.title(file + ' Right')
+        plt.plot(data['rJPos'])
+        # plt.vlines([i for i, v in enumerate(data['rGC']) if v == 0], -1, 1, 'r')
+        plt.plot(rMaximas, [data['rJPos'][i] for i in rMaximas], 'r*')
+        
+        f.canvas.mpl_connect('button_press_event', onclick)
+        plt.show()
+        
+        # Save the labeled data file to the corresponding folder
+        # Each file should be shape (M, 15) -> 10 sensors + nWalk + 4 labels
+        np.savetxt(file[:10] + 'labeled_' + file[10:], data)
+        print("You just finihsed 1 trial! Yay!")
+        print("Labeled file saved as " + file[:10] + 'labeled_' + file[10:] + "\n\n")
