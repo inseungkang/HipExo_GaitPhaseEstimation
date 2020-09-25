@@ -17,10 +17,13 @@ tf.random.set_seed(seed=5)
 subjects = np.arange(1, 2)
 trials = np.arange(1, 6)
 
+# NOTE: fold supports 3 ways of folding - ZI (ZI data only), BT (BT data only),
+# and ZIBT (ZI+BT for train, BT for validation)
+
 # # CNN Model
 # hyperparam_space = {
 #     'subject': subjects,
-#     'fold': ['BT'],
+#     'fold': ['ZI', 'BT', 'ZIBT'],
 #     'window_size': [100],
 #     'model': 'cnn',
 #     'cnn': {
@@ -43,7 +46,7 @@ trials = np.arange(1, 6)
 # # MLP Model
 # hyperparam_space = {
 #     'subject': subjects,
-#     'fold': ['BT'],
+#     'fold': ['ZIBT'],
 #     'window_size': [20],
 #     'model': 'mlp',
 #     'dense': {

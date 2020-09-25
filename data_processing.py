@@ -459,6 +459,13 @@ def nn_extract_features_subject(subject_data, window_size, test_trial, fold):
                 else:
                     training_data.extend(subject_data[condition][trial])
     elif fold == 'BT':
+        for condition in ['BTCW','BTCCW']:
+            for trial in subject_data[condition].keys():
+                if trial == test_trial:
+                    testing_data.extend(subject_data[condition][trial])
+                else:
+                    training_data.extend(subject_data[condition][trial])
+    elif fold == 'ZIBT':
         for condition in subject_data.keys():
             for trial in subject_data[condition].keys():
                 if condition in ['BTCW', 'BTCCW']:
@@ -565,6 +572,13 @@ def cnn_extract_features_subject(subject_data, window_size, test_trial, fold):
                 else:
                     training_data.extend(subject_data[condition][trial])
     elif fold == 'BT':
+        for condition in ['BTCW','BTCCW']:
+            for trial in subject_data[condition].keys():
+                if trial == test_trial:
+                    testing_data.extend(subject_data[condition][trial])
+                else:
+                    training_data.extend(subject_data[condition][trial])
+    elif fold == 'ZIBT':
         for condition in subject_data.keys():
             for trial in subject_data[condition].keys():
                 if condition in ['BTCW', 'BTCCW']:
