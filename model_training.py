@@ -467,7 +467,7 @@ def train_models_subject(model_type, hyperparameter_configs, data):
         # NOTE: This is assuming that for each subject, CW and CCW have
         #       number of trials, will need to change this if that's not 
         #       garuateed to be the case anymore.
-        test_trial_num = np.arange(1, len(subject_data['CW'])+1)
+        test_trial_num = np.arange(1, len(subject_data['ZICW'].keys())+1)
         for test_trial in test_trial_num:
             dataset = get_dataset_subject(model_type, subject_data, model_config['window_size'], test_trial, model_config['fold'])
             model = create_model(model_config, dataset)
