@@ -1,11 +1,12 @@
 import itertools
 import numpy as np
+from tensorflow.initializers import he_uniform
 from tensorflow.keras import Input
 from tensorflow.keras.backend import clear_session
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Conv1D, Activation, Flatten, LSTM, BatchNormalization
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
-# from tensorflow.keras.initializers import GlorotUniform
+# from tensorflow.keras.initializers import HeUniform
 # from tensorflow.keras.layers.experimental.preprocessing import Normalization
 from data_processing import *
 
@@ -219,13 +220,13 @@ def lstm_model(sequence_length, n_features, lstm_config, dense_config, optim_con
     model.add(BatchNormalization(input_shape=(sequence_length, n_features)))
     model.add(LSTM(
                 return_sequences = False,
-                # kernel_initializer=GlorotUniform(seed=1),
-                # recurrent_initializer=GlorotUniform(seed=11),
-                # bias_initializer=GlorotUniform(seed=25),
+                kernel_initializer=he_uniform(seed=1),
+                recurrent_initializer=he_uniform(seed=11),
+                bias_initializer=he_uniform(seed=25),
                 **lstm_config))
     model.add(Dense(4,
-                # kernel_initializer=GlorotUniform(seed=91),
-                # bias_initializer=GlorotUniform(seed=74),
+                kernel_initializer=he_uniform(seed=91),
+                bias_initializer=he_uniform(seed=74),
                 **dense_config))
     model.compile(**optim_config)
     return model
@@ -239,19 +240,26 @@ def cnn_model(window_size, n_features, cnn_config, dense_config, optim_config, X
     # model.add(norm_layer)
     model.add(BatchNormalization(input_shape=(window_size, n_features)))
     model.add(Conv1D(10,
-                conv_kernel))
-                # kernel_initializer=GlorotUniform(seed=1),
-                # bias_initializer=GlorotUniform(seed=11)))
+                conv_kernel,
+                input_shape=(window_size, n_features),
+                kernel_initializer=he_uniform(seed=1),
+                bias_initializer=he_uniform(seed=11)))
+                # kernel_initializer=HeUniform(seed=1),
+                # bias_initializer=HeUniform(seed=11)))
     model.add(Conv1D(10,
-                (int)(window_size - conv_kernel + 1)))
-                # kernel_initializer=GlorotUniform(seed=25),
-                # bias_initializer=GlorotUniform(seed=91)))
+                (int)(window_size - conv_kernel + 1),
+                kernel_initializer=he_uniform(seed=25),
+                bias_initializer=he_uniform(seed=91)))
+                # kernel_initializer=HeUniform(seed=25),
+                # bias_initializer=HeUniform(seed=91)))
     model.add(Activation(cnn_config['activation']))
     model.add(Flatten())
     model.add(Dense(4,
-                dense_config['activation']))
-                # kernel_initializer=GlorotUniform(seed=74),
-                # bias_initializer=GlorotUniform(seed=52)))
+                dense_config['activation'],
+                kernel_initializer=he_uniform(seed=74),
+                bias_initializer=he_uniform(seed=52)))
+                # kernel_initializer=HeUniform(seed=74),
+                # bias_initializer=HeUniform(seed=52)))
     model.compile(**optim_config)
     return model
 
@@ -467,9 +475,6 @@ def train_models_subject(model_type, hyperparameter_configs, data):
         current_result['right_validation_rmse'] = []
         subject = model_config['subject']
         subject_data = data[f'AB{subject:02d}']
-        # NOTE: This is assuming that for each subject, CW and CCW have
-        #       number of trials, will need to change this if that's not 
-        #       garuateed to be the case anymore.
         test_trial_num = np.arange(1, len(subject_data['ZICW'].keys())+1)
         for test_trial in test_trial_num:
             dataset = get_dataset_subject(model_type, subject_data, model_config['window_size'], test_trial, model_config['fold'])
@@ -535,3 +540,21 @@ def get_dataset_subject(model_type, data_list, window_size, test_trial, fold):
         return nn_extract_features_subject(data_list, window_size, test_trial, fold)
     else:
         raise Exception('No dataset for model type')
+
+
+def train_model_final(model_type, hyperparameter_configs, data):
+    results = []
+    for model_config in hyperparameter_configs:
+        current_result = {}
+        current_result['model_config'] = model_config
+        current_result['left_validation_rmse'] = []
+        current_result['right_validation_rmse'] = []
+        subject = model_config['subject']
+        subject_data = data[f'AB{subject:02d}']
+        test_trial_num = 0
+        dataset = get_dataset_subject(model_type, subject_data, model_config['window_size'], test_trial, model_config['fold'])
+        model = create_model(model_config, dataset)
+        model.summary()
+        early_stopping_callback = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=0)
+        model_hist = model.fit(dataset['X_train'], dataset['y_train'], verbose=1, validation_split=0.2, shuffle=True, callbacks= [early_stopping_callback], **model_config['training'])
+        model.save('final_model')
