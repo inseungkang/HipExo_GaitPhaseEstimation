@@ -11,8 +11,8 @@ from numpy.random import seed
 import tensorflow as tf
 
 # Seed Random Number Generators for Reproducibility
-seed(1)
-tf.random.set_seed(seed=5)
+# seed(1)
+# tf.random.set_seed(seed=5)
 
 subjects = np.arange(1, 2)
 trials = np.arange(1, 6)
@@ -20,10 +20,10 @@ trials = np.arange(1, 6)
 # NOTE: fold supports 3 ways of folding - ZI (ZI data only), BT (BT data only),
 # and ZIBT (ZI+BT for train, BT for validation)
 
-# # CNN Model
+## CNN Model
 # hyperparam_space = {
 #     'subject': subjects,
-#     'fold': ['ZI', 'BT', 'ZIBT'],
+#     'fold': ['ZI'],
 #     'window_size': [100],
 #     'model': 'cnn',
 #     'cnn': {
@@ -38,36 +38,36 @@ trials = np.arange(1, 6)
 #         'optimizer': ['adam']
 #     },
 #     'training': {
-#         'epochs': [2],
+#         'epochs': [100],
 #         'batch_size': [128]
 #     }
 # }
 
-# # MLP Model
-# hyperparam_space = {
-#     'subject': subjects,
-#     'fold': ['ZIBT'],
-#     'window_size': [20],
-#     'model': 'mlp',
-#     'dense': {
-#         'num_layers': [1],
-#         'num_nodes': [5],
-#         'activation': ['tanh']
-#     },
-#     'optimizer': {
-#         'loss': ['mean_absolute_error'],
-#         'optimizer': ['adam']
-#     },
-#     'training': {
-#         'epochs': [2],
-#         'batch_size': [128]
-#     }
-# }
+# MLP Model
+hyperparam_space = {
+    'subject': subjects,
+    'fold': ['ZIBT'],
+    'window_size': [20],
+    'model': 'mlp',
+    'dense': {
+        'num_layers': [1],
+        'num_nodes': [5],
+        'activation': ['relu']
+    },
+    'optimizer': {
+        'loss': ['mean_absolute_error'],
+        'optimizer': ['adam']
+    },
+    'training': {
+        'epochs': [2],
+        'batch_size': [128]
+    }
+}
 
 # # LSTM Model
 # hyperparam_space = {
 #     'subject': subjects,
-#     'fold': ['ZI', 'BT'],
+#     'fold': ['ZI'],
 #     'window_size': [40],
 #     'model': 'lstm',
 #     'lstm': {
@@ -75,14 +75,14 @@ trials = np.arange(1, 6)
 #       'activation': ['tanh']
 #     },
 #     'dense': {
-#         'activation': ['relu']
+#         'activation': ['tanh']
 #     },
 #     'optimizer': {
 #         'loss': ['mean_absolute_error'],
 #         'optimizer': ['adam']
 #     },
 #     'training': {
-#         'epochs': [2],
+#         'epochs': [5],
 #         'batch_size': [128]
 #     }
 # }
