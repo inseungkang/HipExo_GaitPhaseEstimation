@@ -1,11 +1,12 @@
 import itertools
 import numpy as np
+from tensorflow.keras import Input
 from tensorflow.keras.backend import clear_session
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Conv1D, Activation, Flatten, LSTM
+from tensorflow.keras.layers import Dense, Conv1D, Activation, Flatten, LSTM, BatchNormalization
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
-from tensorflow.keras.initializers import GlorotUniform
-from tensorflow.keras.layers.experimental.preprocessing import Normalization
+# from tensorflow.keras.initializers import GlorotUniform
+# from tensorflow.keras.layers.experimental.preprocessing import Normalization
 from data_processing import *
 
 # Takes hyperparameter search space and creates an
@@ -126,7 +127,7 @@ def train_models(model_type, hyperparameter_configs, data_list):
             early_stopping_callback = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=0)
             model_hist = model.fit(dataset['X_train'], dataset['y_train'], verbose=1, validation_split=0.2, shuffle=True, callbacks= [early_stopping_callback], **model_config['training'])
 
-            predictions = model.predict(dataset['X_test'])
+            predictions = model.predictpy(dataset['X_test'])
             left_rmse, right_rmse = custom_rmse(dataset['y_test'], predictions)
 
             current_result['left_validation_rmse'].append(left_rmse)
@@ -212,18 +213,19 @@ def create_model(model_config, dataset):
 # Creates an LSTM model based on the specified configuration
 def lstm_model(sequence_length, n_features, lstm_config, dense_config, optim_config, X_train):
     model = Sequential()
-    norm_layer = Normalization(input_shape=(sequence_length, n_features))
-    norm_layer.adapt(X_train)
-    model.add(norm_layer)
+    # norm_layer = Normalization(input_shape=(sequence_length, n_features))
+    # norm_layer.adapt(X_train)
+    # model.add(norm_layer)
+    model.add(BatchNormalization(input_shape=(sequence_length, n_features)))
     model.add(LSTM(
-                return_sequences = False, 
-                kernel_initializer=GlorotUniform(seed=1),
-                recurrent_initializer=GlorotUniform(seed=11),
-                bias_initializer=GlorotUniform(seed=25),
+                return_sequences = False,
+                # kernel_initializer=GlorotUniform(seed=1),
+                # recurrent_initializer=GlorotUniform(seed=11),
+                # bias_initializer=GlorotUniform(seed=25),
                 **lstm_config))
     model.add(Dense(4,
-                kernel_initializer=GlorotUniform(seed=91),
-                bias_initializer=GlorotUniform(seed=74),
+                # kernel_initializer=GlorotUniform(seed=91),
+                # bias_initializer=GlorotUniform(seed=74),
                 **dense_config))
     model.compile(**optim_config)
     return model
@@ -232,33 +234,34 @@ def lstm_model(sequence_length, n_features, lstm_config, dense_config, optim_con
 def cnn_model(window_size, n_features, cnn_config, dense_config, optim_config, X_train):
     conv_kernel = cnn_config['kernel_size']
     model = Sequential()
-    norm_layer = Normalization(input_shape=(window_size, n_features))
-    norm_layer.adapt(X_train)
-    model.add(norm_layer)
+    # norm_layer = Normalization(input_shape=(window_size, n_features))
+    # norm_layer.adapt(X_train)
+    # model.add(norm_layer)
+    model.add(BatchNormalization(input_shape=(window_size, n_features)))
     model.add(Conv1D(10,
-                conv_kernel,
-                input_shape=(window_size, n_features), 
-                kernel_initializer=GlorotUniform(seed=1),
-                bias_initializer=GlorotUniform(seed=11)))
+                conv_kernel))
+                # kernel_initializer=GlorotUniform(seed=1),
+                # bias_initializer=GlorotUniform(seed=11)))
     model.add(Conv1D(10,
-                (int)(window_size - conv_kernel + 1),
-                kernel_initializer=GlorotUniform(seed=25),
-                bias_initializer=GlorotUniform(seed=91)))
+                (int)(window_size - conv_kernel + 1)))
+                # kernel_initializer=GlorotUniform(seed=25),
+                # bias_initializer=GlorotUniform(seed=91)))
     model.add(Activation(cnn_config['activation']))
     model.add(Flatten())
     model.add(Dense(4,
-                dense_config['activation'],
-                kernel_initializer=GlorotUniform(seed=74),
-                bias_initializer=GlorotUniform(seed=52)))
+                dense_config['activation']))
+                # kernel_initializer=GlorotUniform(seed=74),
+                # bias_initializer=GlorotUniform(seed=52)))
     model.compile(**optim_config)
     return model
 
 # Creates an MLP model based on the specified configuration
 def mlp_model(n_features, dense_config, optim_config, X_train):
     model = Sequential()
-    norm_layer = Normalization(input_shape=(n_features,))
-    norm_layer.adapt(X_train)
-    model.add(norm_layer)
+    # norm_layer = Normalization(input_shape=(n_features,))
+    # norm_layer.adapt(X_train)
+    # model.add(norm_layer)
+    model.add(BatchNormalization(input_shape=(n_features,)))
     for x in range(dense_config['num_layers']):
         model.add(Dense(dense_config['num_nodes'], activation=dense_config['activation']))
     model.add(Dense(4))
