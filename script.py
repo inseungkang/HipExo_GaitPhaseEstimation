@@ -11,19 +11,19 @@ from numpy.random import seed
 import tensorflow as tf
 
 # Seed Random Number Generators for Reproducibility
-# seed(1)
-# tf.random.set_seed(seed=5)
+seed(1)
+tf.compat.v1.set_random_seed(seed=5)
 
 subjects = np.arange(1, 2)
-trials = np.arange(1, 6)
+trials = np.arange(1, 5)
 
 # NOTE: fold supports 3 ways of folding - ZI (ZI data only), BT (BT data only),
 # and ZIBT (ZI+BT for train, BT for validation)
 
-## CNN Model
+# # CNN Model
 # hyperparam_space = {
 #     'subject': subjects,
-#     'fold': ['ZI'],
+#     'fold': ['BT'],
 #     'window_size': [100],
 #     'model': 'cnn',
 #     'cnn': {
@@ -38,31 +38,31 @@ trials = np.arange(1, 6)
 #         'optimizer': ['adam']
 #     },
 #     'training': {
-#         'epochs': [100],
+#         'epochs': [10],
 #         'batch_size': [128]
 #     }
 # }
 
-# MLP Model
-hyperparam_space = {
-    'subject': subjects,
-    'fold': ['ZIBT'],
-    'window_size': [20],
-    'model': 'mlp',
-    'dense': {
-        'num_layers': [1],
-        'num_nodes': [5],
-        'activation': ['relu']
-    },
-    'optimizer': {
-        'loss': ['mean_absolute_error'],
-        'optimizer': ['adam']
-    },
-    'training': {
-        'epochs': [2],
-        'batch_size': [128]
-    }
-}
+# # MLP Model
+# hyperparam_space = {
+#     'subject': subjects,
+#     'fold': ['ZIBT'],
+#     'window_size': [20],
+#     'model': 'mlp',
+#     'dense': {
+#         'num_layers': [1],
+#         'num_nodes': [5],
+#         'activation': ['relu']
+#     },
+#     'optimizer': {
+#         'loss': ['mean_absolute_error'],
+#         'optimizer': ['adam']
+#     },
+#     'training': {
+#         'epochs': [2],
+#         'batch_size': [128]
+#     }
+# }
 
 # # LSTM Model
 # hyperparam_space = {
@@ -82,7 +82,7 @@ hyperparam_space = {
 #         'optimizer': ['adam']
 #     },
 #     'training': {
-#         'epochs': [5],
+#         'epochs': [2],
 #         'batch_size': [128]
 #     }
 # }
@@ -92,5 +92,6 @@ hyperparameter_configs = get_model_configs_subject(hyperparam_space)
 data = import_subject_data(subjects, trials)
 
 trial_results, average_results = train_models_subject(hyperparam_space['model'], hyperparameter_configs, data)
+
 trial_results.to_csv('trial_results.csv')
 average_results.to_csv('average_results.csv')
