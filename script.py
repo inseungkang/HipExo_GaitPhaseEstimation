@@ -71,7 +71,7 @@ trials = np.arange(1, 5)
 # # LSTM Model
 # hyperparam_space = {
 #     'subject': subjects,
-#     'fold': ['ZI'],
+#     'fold': ['BT'],
 #     'window_size': [40],
 #     'model': 'lstm',
 #     'lstm': {
@@ -96,7 +96,9 @@ hyperparameter_configs = get_model_configs_subject(hyperparam_space)
 
 data = import_subject_data(subjects, trials)
 
-trial_results, average_results = train_models_subject(hyperparam_space['model'], hyperparameter_configs, data)
+# trial_results, average_results = train_models_subject(hyperparam_space['model'], hyperparameter_configs, data)
 
-trial_results.to_csv('trial_results.csv')
-average_results.to_csv('average_results.csv')
+# trial_results.to_csv('trial_results.csv')
+# average_results.to_csv('average_results.csv')
+
+# train_model_final(hyperparam_space['model'], hyperparameter_configs, data)
