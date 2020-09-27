@@ -2,6 +2,7 @@ import itertools
 import numpy as np
 from tensorflow.initializers import he_uniform
 from tensorflow.keras import Input
+from tensorflow.keras.optimizers import Adam, SGD, RMSprop, Adagrad
 from tensorflow.keras.backend import clear_session
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Conv1D, Activation, Flatten, LSTM, BatchNormalization
@@ -210,7 +211,8 @@ def create_model(model_config, dataset):
                          X_train=dataset['X_train'])
     else:
         raise Exception('No model generator for model type')
-
+    
+    
 # Creates an LSTM model based on the specified configuration
 def lstm_model(sequence_length, n_features, lstm_config, dense_config, optim_config, X_train):
     model = Sequential()
@@ -407,7 +409,6 @@ def get_model_configs_subject(hyperparam_space):
 
                 for param in optim_params:
                     optim_possibilities.append(hyperparam_space['optimizer'][param])
-
                 optim_config_tuples = itertools.product(*optim_possibilities)
                 optim_configs = []
                 for config in optim_config_tuples:
@@ -415,7 +416,7 @@ def get_model_configs_subject(hyperparam_space):
                     for i, value in enumerate(config):
                         optim_config[optim_params[i]] = value
                     optim_configs.append(optim_config)
-                    
+
                 training_params = list(hyperparam_space['training'].keys())
 
                 training_possibilities = []
@@ -466,6 +467,44 @@ def get_model_configs_subject(hyperparam_space):
     return model_configs
 
 
+# Creates the appropriate model based on the configuration
+def create_model_subject(model_config, dataset):
+    if 'lr' in model_config['optimizer']:
+        lr = model_config['optimizer']['lr']
+        optim_config = {k:v for (k, v) in model_config['optimizer'].items() if k != 'lr'}
+        if optim_config['optimizer'] == 'adam':
+            optim_config['optimizer'] = Adam(learning_rate=lr)
+        if optim_config['optimizer'] == 'sgd':
+            optim_config['optimizer'] = SGD(learning_rate=lr)
+        if optim_config['optimizer'] == 'adagrad':
+            optim_config['optimizer'] = Adagrad(learning_rate=lr)
+        if optim_config['optimizer'] == 'rmsprop':
+            optim_config['optimizer'] = RMSprop(learning_rate=lr)
+    else:
+        optim_config = model_config['optimizer']
+    if (model_config['model'] == 'lstm'):
+        return lstm_model(sequence_length=model_config['window_size'],
+                          n_features=10, 
+                           lstm_config=model_config['lstm'],
+                           dense_config=model_config['dense'],
+                           optim_config=optim_config,
+                           X_train=dataset['X_train'].squeeze())
+    elif (model_config['model'] == 'cnn'):
+        return cnn_model(window_size=model_config['window_size'],
+                         n_features=10,
+                         cnn_config=model_config['cnn'],
+                         dense_config=model_config['dense'],
+                         optim_config=optim_config,
+                         X_train=dataset['X_train'])
+    elif (model_config['model'] == 'mlp'):
+        return mlp_model(n_features=50,
+                         dense_config=model_config['dense'],
+                         optim_config=optim_config,
+                         X_train=dataset['X_train'])
+    else:
+        raise Exception('No model generator for model type')
+
+
 def train_models_subject(model_type, hyperparameter_configs, data):
     results = []
     for model_config in hyperparameter_configs:
@@ -478,7 +517,7 @@ def train_models_subject(model_type, hyperparameter_configs, data):
         test_trial_num = np.arange(1, len(subject_data['ZICW'].keys())+1)
         for test_trial in test_trial_num:
             dataset = get_dataset_subject(model_type, subject_data, model_config['window_size'], test_trial, model_config['fold'])
-            model = create_model(model_config, dataset)
+            model = create_model_subject(model_config.copy(), dataset)
             model.summary()
             early_stopping_callback = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=0)
             model_hist = model.fit(dataset['X_train'], dataset['y_train'], verbose=1, validation_split=0.2, shuffle=True, callbacks= [early_stopping_callback], **model_config['training'])
@@ -553,7 +592,7 @@ def train_model_final(model_type, hyperparameter_configs, data):
         subject_data = data[f'AB{subject:02d}']
         test_trial_num = 0
         dataset = get_dataset_subject(model_type, subject_data, model_config['window_size'], test_trial, model_config['fold'])
-        model = create_model(model_config, dataset)
+        model = create_model_subject(model_config, dataset)
         model.summary()
         early_stopping_callback = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=0)
         model_hist = model.fit(dataset['X_train'], dataset['y_train'], verbose=1, validation_split=0.2, shuffle=True, callbacks= [early_stopping_callback], **model_config['training'])
