@@ -19,6 +19,8 @@ trials = np.arange(1, 5)
 
 # NOTE: fold supports 3 ways of folding - ZI (ZI data only), BT (BT data only),
 # and ZIBT (ZI+BT for train, BT for validation)
+# NOTE: don't put 'lr' in hyperparam_space to indicate default learning rate
+# for each optimizers
 
 # # CNN Model
 # hyperparam_space = {
@@ -35,6 +37,7 @@ trials = np.arange(1, 5)
 #     },
 #     'optimizer': {
 #         'loss': ['mean_absolute_error'],
+#         'lr': [0.0001, 0.001, 0.01],
 #         'optimizer': ['adam']
 #     },
 #     'training': {
@@ -56,7 +59,8 @@ trials = np.arange(1, 5)
 #     },
 #     'optimizer': {
 #         'loss': ['mean_absolute_error'],
-#         'optimizer': ['adam']
+#         'lr': [0.001],
+#         'optimizer': ['adam', 'sgd', 'rmsprop', 'adagrad']
 #     },
 #     'training': {
 #         'epochs': [2],
@@ -88,6 +92,7 @@ trials = np.arange(1, 5)
 # }
 
 hyperparameter_configs = get_model_configs_subject(hyperparam_space)
+# print(hyperparameter_configs)
 
 data = import_subject_data(subjects, trials)
 
