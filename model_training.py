@@ -591,7 +591,7 @@ def train_model_final(model_type, hyperparameter_configs, data):
         subject = model_config['subject']
         subject_data = data[f'AB{subject:02d}']
         test_trial_num = 0
-        dataset = get_dataset_subject(model_type, subject_data, model_config['window_size'], test_trial, model_config['fold'])
+        dataset = get_dataset_subject(model_type, subject_data, model_config['window_size'], test_trial_num, model_config['fold'])
         model = create_model_subject(model_config, dataset)
         model.summary()
         early_stopping_callback = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=0)
