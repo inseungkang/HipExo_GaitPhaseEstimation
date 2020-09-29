@@ -454,10 +454,9 @@ def nn_extract_features_subject(subject_data, window_size, test_trial, fold):
     if fold == 'ZI':
         for condition in ['ZICW','ZICCW']:
             for trial in subject_data[condition].keys():
-                if trial == test_trial:
-                    testing_data.extend(subject_data[condition][trial])
-                else:
-                    training_data.extend(subject_data[condition][trial])
+                training_data.extend(subject_data[condition][trial])
+        for condition in ['BTCW', 'BTCCW']:
+            testing_data.extend(subject_data[condition][test_trial])
     elif fold == 'BT':
         for condition in ['BTCW','BTCCW']:
             for trial in subject_data[condition].keys():
@@ -475,7 +474,7 @@ def nn_extract_features_subject(subject_data, window_size, test_trial, fold):
                         training_data.extend(subject_data[condition][trial])
                 else:
                     training_data.extend(subject_data[condition][trial])
-        
+   
     X_test = np.zeros((1, 50))
     Y_test = np.zeros((1, 4))
     X_train = np.zeros((1, 50))
@@ -567,10 +566,9 @@ def cnn_extract_features_subject(subject_data, window_size, test_trial, fold):
     if fold == 'ZI':
         for condition in ['ZICW','ZICCW']:
             for trial in subject_data[condition].keys():
-                if trial == test_trial:
-                    testing_data.extend(subject_data[condition][trial])
-                else:
-                    training_data.extend(subject_data[condition][trial])
+                training_data.extend(subject_data[condition][trial])
+        for condition in ['BTCW', 'BTCCW']:
+            testing_data.extend(subject_data[condition][test_trial])
     elif fold == 'BT':
         for condition in ['BTCW','BTCCW']:
             for trial in subject_data[condition].keys():
@@ -588,7 +586,7 @@ def cnn_extract_features_subject(subject_data, window_size, test_trial, fold):
                         training_data.extend(subject_data[condition][trial])
                 else:
                     training_data.extend(subject_data[condition][trial])
-            
+   
     X_test = np.zeros((1, window_size, 10))
     Y_test = np.zeros((1, 4))
     X_train = np.zeros((1, window_size, 10))
