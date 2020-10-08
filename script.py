@@ -14,7 +14,7 @@ import tensorflow as tf
 seed(1)
 tf.compat.v1.set_random_seed(seed=5)
 
-subjects = np.arange(1, 2)
+subjects = np.arange(1, 3)
 trials = np.arange(1, 5)
 
 # NOTE: fold supports 3 ways of folding - ZI (ZI data only), BT (BT data only),
@@ -22,29 +22,29 @@ trials = np.arange(1, 5)
 # NOTE: don't put 'lr' in hyperparam_space to indicate default learning rate
 # for each optimizers
 
-# # CNN Model
-# hyperparam_space = {
-#     'subject': subjects,
-#     'fold': ['BT'],
-#     'window_size': [100],
-#     'model': 'cnn',
-#     'cnn': {
-#       'kernel_size': [10],
-#       'activation': ['relu']
-#     },
-#     'dense': {
-#         'activation': ['tanh']
-#     },
-#     'optimizer': {
-#         'loss': ['mean_absolute_error'],
-#         'lr': [0.0001, 0.001, 0.01],
-#         'optimizer': ['adam']
-#     },
-#     'training': {
-#         'epochs': [10],
-#         'batch_size': [128]
-#     }
-# }
+# CNN Model
+# NOTE: don't put 'subject' in hyperparam_space for independent model
+hyperparam_space = {
+    'fold': ['BT'],
+    'window_size': [100],
+    'model': 'cnn',
+    'cnn': {
+      'kernel_size': [10],
+      'activation': ['relu']
+    },
+    'dense': {
+        'activation': ['tanh']
+    },
+    'optimizer': {
+        'loss': ['mean_absolute_error'],
+        'lr': [0.0001],
+        'optimizer': ['adam']
+    },
+    'training': {
+        'epochs': [1],
+        'batch_size': [128]
+    }
+}
 
 # # MLP Model
 # hyperparam_space = {
@@ -91,14 +91,17 @@ trials = np.arange(1, 5)
 #     }
 # }
 
-hyperparameter_configs = get_model_configs_subject(hyperparam_space)
+hyperparameter_configs = get_model_configs_independent(hyperparam_space)
 # print(hyperparameter_configs)
 
 data = import_subject_data(subjects, trials)
 
+trial_results, average_results = train_models_independent(hyperparam_space['model'], hyperparameter_configs, data)
+
+
 # trial_results, average_results = train_models_subject(hyperparam_space['model'], hyperparameter_configs, data)
 
-# trial_results.to_csv('trial_results.csv')
-# average_results.to_csv('average_results.csv')
+trial_results.to_csv('trial_results.csv')
+average_results.to_csv('average_results.csv')
 
 # train_model_final(hyperparam_space['model'], hyperparameter_configs, data)
