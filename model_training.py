@@ -732,6 +732,21 @@ def train_model_final(model_type, hyperparameter_configs, data):
         model_hist = model.fit(dataset['X_train'], dataset['y_train'], verbose=1, validation_split=0.2, shuffle=True, callbacks= [early_stopping_callback], **model_config['training'])
         model.save('final_model')
 
+def train_model_indep_final(model_type, hyperparameter_configs, data):
+    results = []
+    for model_config in hyperparameter_configs:
+        current_result = {}
+        current_result['model_config'] = model_config
+        current_result['left_validation_rmse'] = []
+        current_result['right_validation_rmse'] = []
+        test_subject = None
+        dataset = get_dataset_independent(model_type, data, model_config['window_size'], test_subject)
+        model = create_model_subject(model_config, dataset)
+        model.summary()
+        early_stopping_callback = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=0)
+        model_hist = model.fit(dataset['X_train'], dataset['y_train'], verbose=1, validation_split=0.2, shuffle=True, callbacks= [early_stopping_callback], **model_config['training'])
+        model.save('final_model')
+
 def train_models_independent(model_type, hyperparameter_configs, data):
     results = []
     for model_config in hyperparameter_configs:
