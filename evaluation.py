@@ -1,3 +1,4 @@
+import glob
 import pandas as pd
 import matplotlib.pyplot as plt
 from data_processing import *
@@ -32,9 +33,8 @@ def calculate_truth_and_pred(data):
     return data
 
 def calculate_pred(data):
-    l_x_pred, l_y_pred = convert_to_polar(data['leftGaitPhase'])
-
-    r_x_pred, r_y_pred = convert_to_polar(data['rightGaitPhase'])
+    # l_x_pred, l_y_pred = convert_to_polar(data['leftGaitPhase'])
+    # r_x_pred, r_y_pred = convert_to_polar(data['rightGaitPhase'])
     
     pred = pd.concat([l_x_pred, l_y_pred, r_x_pred, r_y_pred], axis=1)
     pred.columns = ['l_x_pred', 'l_y_pred', 'r_x_pred', 'r_y_pred']
@@ -205,12 +205,96 @@ path = 'data/evalData/'
 # # manual_scrap_data_eval(data, path + f'chopped_AB{subject}_{method}.txt')
 # # manual_label_data_eval(data, path+f'labeled_AB{subject}_{method}.txt')
 # manual_label_data(data, path+f'labeled_AB{subject}_{method}.txt')
-
+output = pd.DataFrame(columns=['model', 'locomotion_mode', 'step_rmse'])
 # For Labeled Data
-filename = path + f'labeled_AB{subject}_{method}.txt'
-data = pd.read_csv(filename).reset_index()
-manual_scrap_data(data, f'chopped_AB{subject}_{method}')
+for file in sorted(glob.glob(path+f'chopped_AB{subject}*')):
+    data = np.loadtxt(file)
+    l_x_pred, l_y_pred = convert_to_polar(data[:, -6])
+    r_x_pred, r_y_pred = convert_to_polar(data[:, -5])
+    l_x_pred = l_x_pred.reshape(-1, 1)
+    l_y_pred = l_y_pred.reshape(-1, 1)
+    r_x_pred = r_x_pred.reshape(-1, 1)
+    r_y_pred = r_y_pred.reshape(-1, 1)
+    data = np.concatenate([data, l_x_pred, l_y_pred, r_x_pred, r_y_pred], axis=1)
+    # data = calculate_pred(data)
+    # manual_scrap_data(data, f'chopped_AB{subject}_{method}')
+    rmse = custom_rmse(data[:, -8:-4],
+                       data[:, -4:])
+    rmse = np.mean([rmse[0], rmse[1]])
+    mode = file.split('_')[3:]
+    mode = '_'.join(mode)
+    model = file.split('_')[2]
+    current_output = {
+    'model': model,
+    'locomotion_mode': mode,
+    'step_rmse': rmse
+    }
+    output = output.append(current_output, ignore_index=True)
+# output.to_excel('mode_output.xlsx')
 
+plt.figure()
+plt.style.use('seaborn')
+plt.subplot(211)
+data = np.empty((0, 39))
+indices = [0]
+nan = np.empty((60, 39))
+nan.fill(np.nan)
+
+#!NOTE: Change the list to change the order of the graph!!!
+mode_list = ['LG', 'LG_RA', 'RA', 'RA_LG', 'LG_SD', 'SD', 'SD_LG', 'LG_SA', 'SA', 'SA_LG', 'LG_RD', 'RD', 'RD_LG']
+
+for mode in mode_list:
+    file = path + f'chopped_AB{subject}_ML_{mode}.txt'
+    new_data = np.loadtxt(file)
+    data = np.append(data, new_data, axis=0)
+    data = np.append(data, nan, axis=0)
+    indices.append(data.shape[0]-30)
+
+    rmse = '{:.2f}'.format(output[(output['model'] == 'ML') & (output['locomotion_mode']==mode+'.txt')]['step_rmse'].values[0])
+    plt.text(indices[-1]-((indices[-1]-indices[-2])/2), 1.6, mode+'\n'+rmse, 
+             horizontalalignment='center', verticalalignment='center', fontsize=10)
+    
+gp = convert_to_gp(data[:, -4], data[:, -3])
+plt.plot(gp, label='ground_truth')
+plt.plot(data[:, -6], alpha=0.7, label='predicted')
+# plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.vlines(indices[1:-1], 0, 2, 'black', linestyles='dashed')
+plt.tick_params(
+    axis='x',          # changes apply to the x-axis
+    which='both',      # both major and minor ticks are affected
+    bottom=False,      # ticks along the bottom edge are off
+    top=False,         # ticks along the top edge are off
+    labelbottom=False)
+
+plt.subplot(212)
+data = np.empty((0, 39))
+indices = [0]
+
+for mode in mode_list:
+    file = path + f'chopped_AB{subject}_TBE_{mode}.txt'
+    new_data = np.loadtxt(file)
+    data = np.append(data, new_data, axis=0)
+    data = np.append(data, nan, axis=0)
+    indices.append(data.shape[0]-30)
+    rmse = '{:.2f}'.format(output[(output['model'] == 'TBE') & (output['locomotion_mode']==mode+'.txt')]['step_rmse'].values[0])
+    plt.text(indices[-1]-((indices[-1]-indices[-2])/2), 1.6, mode+'\n'+rmse, 
+             horizontalalignment='center', verticalalignment='center', fontsize=10)
+    
+gp = convert_to_gp(data[:, -4], data[:, -3])
+plt.plot(gp, label='ground_truth')
+plt.plot(data[:, -6], alpha=0.7, label='predicted')
+# plt.legend(loc=1)
+plt.vlines(indices[1:-1], 0, 2, 'black', linestyles='dashed')
+
+plt.tick_params(
+    axis='x',          # changes apply to the x-axis
+    which='both',      # both major and minor ticks are affected
+    bottom=False,      # ticks along the bottom edge are off
+    top=False,         # ticks along the top edge are off
+    labelbottom=False) # labels along the bottom edge are off
+
+plt.show()
+exit()
 # plt.plot(data['m_lCtrlTrq'])
 # plt.show()
 # exit()
