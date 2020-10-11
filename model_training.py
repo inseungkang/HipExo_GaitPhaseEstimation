@@ -582,12 +582,12 @@ def get_dataset_subject(model_type, data_list, window_size, test_trial, fold):
 
 
 def train_model_final(model_type, hyperparameter_configs, data):
-    results = []
+    # results = []
     for model_config in hyperparameter_configs:
-        current_result = {}
-        current_result['model_config'] = model_config
-        current_result['left_validation_rmse'] = []
-        current_result['right_validation_rmse'] = []
+        # current_result = {}
+        # current_result['model_config'] = model_config
+        # current_result['left_validation_rmse'] = []
+        # current_result['right_validation_rmse'] = []
         subject = model_config['subject']
         subject_data = data[f'AB{subject:02d}']
         test_trial_num = 0

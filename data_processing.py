@@ -213,8 +213,10 @@ def extract_joint_positions(data_all):
     left_joint_positions, right_joint_positions = [], []
     for data in data_all:
         # create joing position lists
-        left_joint_positions.append(data['lJPos'])
-        right_joint_positions.append(data['rJPos'])
+        # left_joint_positions.append(data['lJPos'])
+        # right_joint_positions.append(data['rJPos'])
+        left_joint_positions.append(data['leftJointPosition'])
+        right_joint_positions.append(data['rightJointPosition'])        
     return left_joint_positions, right_joint_positions
 
 
@@ -586,7 +588,7 @@ def cnn_extract_features_subject(subject_data, window_size, test_trial, fold):
                         training_data.extend(subject_data[condition][trial])
                 else:
                     training_data.extend(subject_data[condition][trial])
-   
+    print(len(training_data))
     X_test = np.zeros((1, window_size, 10))
     Y_test = np.zeros((1, 4))
     X_train = np.zeros((1, window_size, 10))
