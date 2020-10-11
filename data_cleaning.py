@@ -301,7 +301,7 @@ def manual_scrap_data(data, filename):
             clip = data.loc[start:end]
 
             # Save all data for this trial
-            np.savetxt(filename+f'_{i}', clip)
+            np.savetxt(filename+f'_{i}.txt', clip)
             print('Saved')
 
     print('Done with a trial!')
