@@ -14,8 +14,8 @@ import tensorflow as tf
 seed(1)
 tf.compat.v1.set_random_seed(seed=5)
 
-subjects = np.arange(9, 10)
-trials = np.arange(1, 6)
+subjects = np.arange(1, 3)
+trials = np.arange(1, 5)
 
 path = 'data/evalData/'
 headers = pd.read_csv('data/evalData/headers.txt')
@@ -44,25 +44,25 @@ exit()
 # for each optimizers
 
 # CNN Model
+# NOTE: don't put 'subject' in hyperparam_space for independent model
 hyperparam_space = {
-    'subject': subjects,
     'fold': ['BT'],
-    'window_size': [80],
+    'window_size': [100],
     'model': 'cnn',
     'cnn': {
-      'kernel_size': [20],
-      'activation': ['sigmoid']
+      'kernel_size': [10],
+      'activation': ['relu']
     },
     'dense': {
         'activation': ['tanh']
     },
     'optimizer': {
         'loss': ['mean_absolute_error'],
-        'lr': [0.01],
-        'optimizer': ['sgd']
+        'lr': [0.0001],
+        'optimizer': ['adam']
     },
     'training': {
-        'epochs': [200],
+        'epochs': [1],
         'batch_size': [128]
     }
 }
@@ -112,15 +112,18 @@ hyperparam_space = {
 #     }
 # }
 
-# hyperparameter_configs = get_model_configs_subject(hyperparam_space)
-# # print(hyperparameter_configs)
+hyperparameter_configs = get_model_configs_independent(hyperparam_space)
+# print(hyperparameter_configs)
 
 # data = import_subject_data(subjects, trials)
 
+trial_results, average_results = train_models_independent(hyperparam_space['model'], hyperparameter_configs, data)
+
+
 # trial_results, average_results = train_models_subject(hyperparam_space['model'], hyperparameter_configs, data)
 
-# trial_results.to_csv('trial_results.csv')
-# average_results.to_csv('average_results.csv')
+trial_results.to_csv('trial_results.csv')
+average_results.to_csv('average_results.csv')
 
 # train_model_final(hyperparam_space['model'], hyperparameter_configs, data)
 
