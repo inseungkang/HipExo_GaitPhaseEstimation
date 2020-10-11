@@ -189,7 +189,7 @@ def get_mse(y_true, y_pred):
 ############################### Evaluation Script ############################
 headers = pd.read_csv('data/evalData/headers.txt')
 subject = 8
-method = 'ML'
+method = 'TBE'
 
 # Load Data
 path = 'data/evalData/'
