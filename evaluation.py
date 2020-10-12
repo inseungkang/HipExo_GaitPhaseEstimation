@@ -189,22 +189,25 @@ def get_mse(y_true, y_pred):
 ############################### Evaluation Script ############################
 headers = pd.read_csv('data/evalData/headers.txt')
 subject = 8
-method = 'TBE'
+method = 'ML'
 
 # Load Data
 path = 'data/evalData/'
 # path = 'data/evalData/Mag/'
 
-# filename = path + f'AB{subject}_{method}.txt'
+# filename = path + f'labeled_AB{subject}_{method}.txt'
 # data = pd.read_csv(filename)
-# # For Mannually Labeling Data
-# # data = pd.read_csv(filename, skiprows=1, sep=" ")
-# # data = data.dropna(axis=1)
-# # data.columns = headers.columns.str.replace(' ', '')
-# # data = data.loc[:,~data.columns.duplicated()]
-# # manual_scrap_data_eval(data, path + f'chopped_AB{subject}_{method}.txt')
-# # manual_label_data_eval(data, path+f'labeled_AB{subject}_{method}.txt')
+# manual_scrap_data(data, path+f'chopped_AB{subject}_{method}')
+
+# For Mannually Labeling Data
+# data = pd.read_csv(filename, skiprows=1, sep=" ")
+# data = data.dropna(axis=1)
+# data.columns = headers.columns.str.replace(' ', '')
+# data = data.loc[:,~data.columns.duplicated()]
+# manual_scrap_data_eval(data, path + f'chopped_AB{subject}_{method}.txt')
+# manual_label_data_eval(data, path+f'labeled_AB{subject}_{method}.txt')
 # manual_label_data(data, path+f'labeled_AB{subject}_{method}.txt')
+
 output = pd.DataFrame(columns=['model', 'locomotion_mode', 'step_rmse'])
 # For Labeled Data
 for file in sorted(glob.glob(path+f'chopped_AB{subject}*')):
@@ -216,8 +219,6 @@ for file in sorted(glob.glob(path+f'chopped_AB{subject}*')):
     r_x_pred = r_x_pred.reshape(-1, 1)
     r_y_pred = r_y_pred.reshape(-1, 1)
     data = np.concatenate([data, l_x_pred, l_y_pred, r_x_pred, r_y_pred], axis=1)
-    # data = calculate_pred(data)
-    # manual_scrap_data(data, f'chopped_AB{subject}_{method}')
     rmse = custom_rmse(data[:, -8:-4],
                        data[:, -4:])
     rmse = np.mean([rmse[0], rmse[1]])
@@ -235,9 +236,9 @@ for file in sorted(glob.glob(path+f'chopped_AB{subject}*')):
 plt.figure()
 plt.style.use('seaborn')
 plt.subplot(211)
-data = np.empty((0, 39))
+data = np.empty((0, 38))
 indices = [0]
-nan = np.empty((60, 39))
+nan = np.empty((60, 38))
 nan.fill(np.nan)
 
 #!NOTE: Change the list to change the order of the graph!!!
@@ -267,12 +268,12 @@ plt.tick_params(
     labelbottom=False)
 
 plt.subplot(212)
-data = np.empty((0, 39))
+data = np.empty((0, 38))
 indices = [0]
 
 for mode in mode_list:
     file = path + f'chopped_AB{subject}_TBE_{mode}.txt'
-    new_data = np.loadtxt(file)
+    new_data = np.loadtxt(file)[:, 1:]
     data = np.append(data, new_data, axis=0)
     data = np.append(data, nan, axis=0)
     indices.append(data.shape[0]-30)
@@ -295,11 +296,8 @@ plt.tick_params(
 
 plt.show()
 exit()
-# plt.plot(data['m_lCtrlTrq'])
-# plt.show()
-# exit()
-# data = manual_segment_magnitudes(data, path + f'segmented_AB{subject}_{method}')
 
+# data = manual_segment_magnitudes(data, path + f'segmented_AB{subject}_{method}')
 # filename = path + f'segmented_AB{subject}_{method}'
 # data = pd.read_csv(filename)
 # add 4 ground truth columns and 4 prediction columns at the end of data
