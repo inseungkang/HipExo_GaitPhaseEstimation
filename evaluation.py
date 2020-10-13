@@ -196,9 +196,10 @@ method = 'ML'
 path = 'data/evalData/'
 # path = 'data/evalData/Mag/'
 
-# filename = path + f'labeled_AB{subject}_{method}.txt'
-# data = pd.read_csv(filename)
-# manual_scrap_data(data, path+f'chopped_AB{subject}_{method}')
+filename = path + f'labeled_AB{subject}_{method}.txt'
+data = pd.read_csv(filename)
+manual_scrap_data(data, path+f'chopped_AB{subject}_{method}')
+exit()
 
 # For Mannually Labeling Data
 # data = pd.read_csv(filename, skiprows=1, sep=" ")
