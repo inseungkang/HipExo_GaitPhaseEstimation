@@ -241,7 +241,7 @@ plt.style.use('seaborn-paper')
 nan = np.empty((60, 38))
 nan.fill(np.nan)
 # modes = {1:'LG', 2:'RA', 3:'RD', 4:'SA', 5:'SD'}
-torque = pd.read_excel(path+'torque_profile1.xlsx')
+torque = pd.read_excel(path+'torque_profile_scaled.xlsx')
 torque_tables = {
     1: torque[torque['Locomotion Mode'] == 'LG'],
     2: torque[torque['Locomotion Mode'] == 'RA'],
