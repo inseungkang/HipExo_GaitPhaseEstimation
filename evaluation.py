@@ -196,10 +196,10 @@ method = 'ML'
 path = 'data/evalData/'
 # path = 'data/evalData/Mag/'
 
-filename = path + f'labeled_AB{subject}_{method}.txt'
-data = pd.read_csv(filename)
-manual_scrap_data(data, path+f'chopped_AB{subject}_{method}')
-exit()
+# filename = path + f'labeled_AB{subject}_{method}.txt'
+# data = pd.read_csv(filename)
+# manual_scrap_data(data, path+f'chopped_AB{subject}_{method}')
+# exit()
 
 # For Mannually Labeling Data
 # data = pd.read_csv(filename, skiprows=1, sep=" ")
@@ -240,18 +240,27 @@ plt.style.use('seaborn-paper')
 # Create Nan array used to provide white space between each mode
 nan = np.empty((60, 38))
 nan.fill(np.nan)
-modes = {1:'LG', 2:'RA', 3:'RD', 4:'SA', 5:'SD'}
+# modes = {1:'LG', 2:'RA', 3:'RD', 4:'SA', 5:'SD'}
 torque = pd.read_excel(path+'torque_profile1.xlsx')
-print(torque)
+torque_tables = {
+    1: torque[torque['Locomotion Mode'] == 'LG'],
+    2: torque[torque['Locomotion Mode'] == 'RA'],
+    3: torque[torque['Locomotion Mode'] == 'RD'],
+    4: torque[torque['Locomotion Mode'] == 'SA'],
+    5: torque[torque['Locomotion Mode'] == 'SD']    
+}
 
 #!NOTE: Change the list to change the order of the graph!!!
 mode_list = ['LG', 'LG_RA', 'RA', 'RA_LG', 'LG_SD', 'SD', 'SD_LG', 'LG_SA', 'SA', 'SA_LG', 'LG_RD', 'RD', 'RD_LG']
 
-plt.subplot(411)
+plt.subplot(211)
 data = np.empty((0, 39))
 indices = [0]
 # Append all the mode data together in order of the mode list
 ct = 0
+
+torque = []
+commanded_torque = []
 for mode in mode_list:
     file = path + f'chopped_AB{subject}_ML_{mode}.txt'
     new_data = np.loadtxt(file)
@@ -261,22 +270,37 @@ for mode in mode_list:
     data = np.append(data, new_data, axis=0)
     data = np.append(data, new_nan, axis=0)
     indices.append(225+ct)
+
+    for pt in new_data:
+        # Calculate Torque
+        if mode == 'RA_LG':
+            cur_mode = pt[-8]
+            cur_gp = convert_to_gp(pt[-3], pt[-2])
+            commanded_torque = np.append(commanded_torque, pt[-13])
+        elif mode == 'RD_LG':
+            cur_mode = pt[-8]
+            cur_gp = convert_to_gp(pt[-3], pt[-2])
+            commanded_torque = np.append(commanded_torque, pt[-13])
+        else:
+            cur_mode = pt[-9]
+            cur_gp = convert_to_gp(pt[-5], pt[-4])
+            commanded_torque = np.append(commanded_torque, pt[-14])
+
+        cur_gp = cur_gp * 100
+        cur_torque_table = torque_tables[int(cur_mode)]
+        cur_gt_torque = np.interp(cur_gp, cur_torque_table['Gait Phase'], cur_torque_table['Joint Torque'])
+        torque = np.append(torque, cur_gt_torque)
     
+    torque = np.append(torque, nan[:,1])
+    commanded_torque = np.append(commanded_torque, nan[:,1])
+
     ct += 250
     mode_label = ' to '.join(mode.split('_'))
     rmse = '{:.2f}'.format(output[(output['model'] == 'ML') & (output['locomotion_mode']==mode+'.txt')]['step_rmse'].values[0])
     plt.text(indices[-1]-((indices[-1]-indices[-2])/2), 1.3, mode_label+'\n'+rmse, 
-             horizontalalignment='center', verticalalignment='center', fontsize=10)
+             horizontalalignment='center', verticalalignment='center', fontsize=7)
     
 gp = convert_to_gp(data[:, -5], data[:, -4])
-
-#NOTE: calculate the torque
-# new_torque = []
-# for i, pt in enumerate(data):
-#     if np.isnan(gp[i]):
-#         new_torque 
-#     else:
-#         torque = 
 
 plt.plot(data[:, -1], gp, 'dimgrey', label='ground_truth')
 plt.plot(data[:, -1], data[:, -7], 'tab:blue', alpha=0.9, label='predicted')
@@ -289,10 +313,12 @@ plt.tick_params(
     top=False,         # ticks along the top edge are off
     labelbottom=False)
 plt.yticks(ticks=[0, 0.5, 1], labels=['0%', '50%', '100%'])
+plt.ylabel('Gait Phase Percentage')
 
-plt.subplot(412)
-plt.plot(data[:, -1], data[:, -9], label='ground truth')
-# plt.plot(data[:, -1], )
+plt.subplot(212)
+plt.plot(data[:, -1], torque, 'dimgrey', label='ground truth')
+plt.plot(data[:, -1], commanded_torque, 'tab:blue', label='commanded')
+
 plt.vlines(indices[1:-1], 0, 1.5, 'black', linestyles='dashed')
 plt.tick_params(
     axis='x',          # changes apply to the x-axis
@@ -300,13 +326,17 @@ plt.tick_params(
     bottom=False,      # ticks along the bottom edge are off
     top=False,         # ticks along the top edge are off
     labelbottom=False)
-plt.yticks(ticks=[0, 0.5, 1], labels=['0%', '50%', '100%'])
+plt.ylabel('Assistance Torque (N-m)')
+plt.show()
 
-plt.subplot(413)
+plt.subplot(211)
 data = np.empty((0, 39))
 indices = [0]
 
+##### TBE PLOT
 # Append all the mode data together in order of the mode list
+torque = []
+commanded_torque = []
 ct = 0
 for mode in mode_list:
     file = path + f'chopped_AB{subject}_TBE_{mode}.txt'
@@ -318,11 +348,35 @@ for mode in mode_list:
     data = np.append(data, new_data, axis=0)
     data = np.append(data, new_nan, axis=0)
     indices.append(225+ct)
+
+    for pt in new_data:
+        # Calculate Torque
+        if mode == 'RA_LG':
+            cur_mode = pt[-8]
+            cur_gp = convert_to_gp(pt[-3], pt[-2])
+            commanded_torque = np.append(commanded_torque, pt[-13])
+        elif mode == 'RD_LG':
+            cur_mode = pt[-8]
+            cur_gp = convert_to_gp(pt[-3], pt[-2])
+            commanded_torque = np.append(commanded_torque, pt[-13])
+        else:
+            cur_mode = pt[-9]
+            cur_gp = convert_to_gp(pt[-5], pt[-4])
+            commanded_torque = np.append(commanded_torque, pt[-14])
+
+        cur_gp = cur_gp * 100
+        cur_torque_table = torque_tables[int(cur_mode)]
+        cur_gt_torque = np.interp(cur_gp, cur_torque_table['Gait Phase'], cur_torque_table['Joint Torque'])
+        torque = np.append(torque, cur_gt_torque)
+    
+    torque = np.append(torque, nan[:,1])
+    commanded_torque = np.append(commanded_torque, nan[:,1])
+
     ct += 250
     mode_label = ' to '.join(mode.split('_'))
     rmse = '{:.2f}'.format(output[(output['model'] == 'TBE') & (output['locomotion_mode']==mode+'.txt')]['step_rmse'].values[0])
     plt.text(indices[-1]-((indices[-1]-indices[-2])/2), 1.3, mode_label+'\n'+rmse, 
-             horizontalalignment='center', verticalalignment='center', fontsize=10)
+             horizontalalignment='center', verticalalignment='center', fontsize=7)
     
 gp = convert_to_gp(data[:, -5], data[:, -4])
 plt.plot(data[:, -1], gp, 'dimgrey', label='ground_truth')
@@ -337,10 +391,12 @@ plt.tick_params(
     top=False,         # ticks along the top edge are off
     labelbottom=False) # labels along the bottom edge are off
 plt.yticks(ticks=[0, 0.5, 1], labels=['0%', '50%', '100%'])
+plt.ylabel('Gait Phase Percentage')
 
-plt.subplot(414)
-plt.plot(data[:, -1], data[:, -9], label='ground truth')
-# plt.plot(data[:, -1], )
+plt.subplot(212)
+plt.plot(data[:, -1], torque, 'dimgrey', label='ground truth')
+plt.plot(data[:, -1], commanded_torque, 'tab:red', label='commanded')
+
 plt.vlines(indices[1:-1], 0, 1.5, 'black', linestyles='dashed')
 plt.tick_params(
     axis='x',          # changes apply to the x-axis
@@ -348,9 +404,9 @@ plt.tick_params(
     bottom=False,      # ticks along the bottom edge are off
     top=False,         # ticks along the top edge are off
     labelbottom=False)
-plt.yticks(ticks=[0, 0.5, 1], labels=['0%', '50%', '100%'])
-
+plt.ylabel('Assistance Torque (N-m)')
 plt.show()
+
 exit()
 
 # data = manual_segment_magnitudes(data, path + f'segmented_AB{subject}_{method}')

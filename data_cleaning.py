@@ -219,7 +219,7 @@ def manual_scrap_data(data, filename):
         l_gp = convert_to_gp(l_data['rightGaitPhaseX'], l_data['rightGaitPhaseY'])
         plt.plot(l_gp, label='ground_truth')
         # plt.plot(l_data['leftJointPosition'], label='Joint Position')
-        plt.plot(l_data['rightGaitPhase'], alpha=0.7, label='predicted')
+        plt.plot(l_data['leftWalkMode'], alpha=0.7, label='predicted')
         plt.plot(l_data['rightWalkMode'], label='mode')
         plt.legend(loc=9)
         if start != False:
