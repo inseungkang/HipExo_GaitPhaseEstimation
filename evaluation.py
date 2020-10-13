@@ -1,6 +1,7 @@
 import glob
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mtick
 from data_processing import *
 from model_training import *
 from data_cleaning import *
@@ -232,60 +233,101 @@ for file in sorted(glob.glob(path+f'chopped_AB{subject}*')):
     }
     output = output.append(current_output, ignore_index=True)
 # output.to_excel('mode_output.xlsx')
-
 plt.figure()
-plt.style.use('seaborn')
-plt.subplot(211)
-data = np.empty((0, 38))
-indices = [0]
+plt.style.use('seaborn-paper')
+
+# Create Nan array used to provide white space between each mode
 nan = np.empty((60, 38))
 nan.fill(np.nan)
+modes = {1:'LG', 2:'RA', 3:'RD', 4:'SA', 5:'SD'}
+torque = pd.read_excel(path+'torque_profile1.xlsx')
+print(torque)
 
 #!NOTE: Change the list to change the order of the graph!!!
 mode_list = ['LG', 'LG_RA', 'RA', 'RA_LG', 'LG_SD', 'SD', 'SD_LG', 'LG_SA', 'SA', 'SA_LG', 'LG_RD', 'RD', 'RD_LG']
 
+plt.subplot(411)
+data = np.empty((0, 39))
+indices = [0]
+# Append all the mode data together in order of the mode list
+ct = 0
 for mode in mode_list:
     file = path + f'chopped_AB{subject}_ML_{mode}.txt'
     new_data = np.loadtxt(file)
+    new_index = np.linspace(1+ct, 200+ct, new_data.shape[0]).reshape(-1, 1)
+    new_nan = np.append(nan, np.linspace(201+ct, 250+ct, nan.shape[0]).reshape(-1, 1), axis=1)
+    new_data = np.append(new_data, new_index, axis=1)
     data = np.append(data, new_data, axis=0)
-    data = np.append(data, nan, axis=0)
-    indices.append(data.shape[0]-30)
-
+    data = np.append(data, new_nan, axis=0)
+    indices.append(225+ct)
+    
+    ct += 250
+    mode_label = ' to '.join(mode.split('_'))
     rmse = '{:.2f}'.format(output[(output['model'] == 'ML') & (output['locomotion_mode']==mode+'.txt')]['step_rmse'].values[0])
-    plt.text(indices[-1]-((indices[-1]-indices[-2])/2), 1.6, mode+'\n'+rmse, 
+    plt.text(indices[-1]-((indices[-1]-indices[-2])/2), 1.3, mode_label+'\n'+rmse, 
              horizontalalignment='center', verticalalignment='center', fontsize=10)
     
-gp = convert_to_gp(data[:, -4], data[:, -3])
-plt.plot(gp, label='ground_truth')
-plt.plot(data[:, -6], alpha=0.7, label='predicted')
+gp = convert_to_gp(data[:, -5], data[:, -4])
+
+#NOTE: calculate the torque
+# new_torque = []
+# for i, pt in enumerate(data):
+#     if np.isnan(gp[i]):
+#         new_torque 
+#     else:
+#         torque = 
+
+plt.plot(data[:, -1], gp, 'dimgrey', label='ground_truth')
+plt.plot(data[:, -1], data[:, -7], 'tab:blue', alpha=0.9, label='predicted')
 # plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-plt.vlines(indices[1:-1], 0, 2, 'black', linestyles='dashed')
+plt.vlines(indices[1:-1], 0, 1.5, 'black', linestyles='dashed')
 plt.tick_params(
     axis='x',          # changes apply to the x-axis
     which='both',      # both major and minor ticks are affected
     bottom=False,      # ticks along the bottom edge are off
     top=False,         # ticks along the top edge are off
     labelbottom=False)
+plt.yticks(ticks=[0, 0.5, 1], labels=['0%', '50%', '100%'])
 
-plt.subplot(212)
-data = np.empty((0, 38))
+plt.subplot(412)
+plt.plot(data[:, -1], data[:, -9], label='ground truth')
+# plt.plot(data[:, -1], )
+plt.vlines(indices[1:-1], 0, 1.5, 'black', linestyles='dashed')
+plt.tick_params(
+    axis='x',          # changes apply to the x-axis
+    which='both',      # both major and minor ticks are affected
+    bottom=False,      # ticks along the bottom edge are off
+    top=False,         # ticks along the top edge are off
+    labelbottom=False)
+plt.yticks(ticks=[0, 0.5, 1], labels=['0%', '50%', '100%'])
+
+plt.subplot(413)
+data = np.empty((0, 39))
 indices = [0]
 
+# Append all the mode data together in order of the mode list
+ct = 0
 for mode in mode_list:
     file = path + f'chopped_AB{subject}_TBE_{mode}.txt'
-    new_data = np.loadtxt(file)[:, 1:]
+    new_data = np.loadtxt(file)
+    new_data = new_data[:, 1:]
+    new_index = np.linspace(1+ct, 200+ct, new_data.shape[0]).reshape(-1, 1)
+    new_nan = np.append(nan, np.linspace(201+ct, 250+ct, nan.shape[0]).reshape(-1, 1), axis=1)
+    new_data = np.append(new_data, new_index, axis=1)
     data = np.append(data, new_data, axis=0)
-    data = np.append(data, nan, axis=0)
-    indices.append(data.shape[0]-30)
+    data = np.append(data, new_nan, axis=0)
+    indices.append(225+ct)
+    ct += 250
+    mode_label = ' to '.join(mode.split('_'))
     rmse = '{:.2f}'.format(output[(output['model'] == 'TBE') & (output['locomotion_mode']==mode+'.txt')]['step_rmse'].values[0])
-    plt.text(indices[-1]-((indices[-1]-indices[-2])/2), 1.6, mode+'\n'+rmse, 
+    plt.text(indices[-1]-((indices[-1]-indices[-2])/2), 1.3, mode_label+'\n'+rmse, 
              horizontalalignment='center', verticalalignment='center', fontsize=10)
     
-gp = convert_to_gp(data[:, -4], data[:, -3])
-plt.plot(gp, label='ground_truth')
-plt.plot(data[:, -6], alpha=0.7, label='predicted')
+gp = convert_to_gp(data[:, -5], data[:, -4])
+plt.plot(data[:, -1], gp, 'dimgrey', label='ground_truth')
+plt.plot(data[:, -1], data[:, -7], 'tab:red', alpha=0.9, label='predicted')
 # plt.legend(loc=1)
-plt.vlines(indices[1:-1], 0, 2, 'black', linestyles='dashed')
+plt.vlines(indices[1:-1], 0, 1.5, 'black', linestyles='dashed')
 
 plt.tick_params(
     axis='x',          # changes apply to the x-axis
@@ -293,6 +335,19 @@ plt.tick_params(
     bottom=False,      # ticks along the bottom edge are off
     top=False,         # ticks along the top edge are off
     labelbottom=False) # labels along the bottom edge are off
+plt.yticks(ticks=[0, 0.5, 1], labels=['0%', '50%', '100%'])
+
+plt.subplot(414)
+plt.plot(data[:, -1], data[:, -9], label='ground truth')
+# plt.plot(data[:, -1], )
+plt.vlines(indices[1:-1], 0, 1.5, 'black', linestyles='dashed')
+plt.tick_params(
+    axis='x',          # changes apply to the x-axis
+    which='both',      # both major and minor ticks are affected
+    bottom=False,      # ticks along the bottom edge are off
+    top=False,         # ticks along the top edge are off
+    labelbottom=False)
+plt.yticks(ticks=[0, 0.5, 1], labels=['0%', '50%', '100%'])
 
 plt.show()
 exit()
@@ -326,6 +381,7 @@ plt.plot(r_gp, label='manual_ground_truth')
 plt.plot(r_data['rightGaitPhase'], alpha=0.7, label='predicted')
 plt.plot(l_data['rightWalkMode'], label='mode')
 plt.legend(loc=9)
+
 plt.show()
 
 # # Calculate the overall rmse
