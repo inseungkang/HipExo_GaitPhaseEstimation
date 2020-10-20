@@ -17,6 +17,9 @@ columns = ['lJPos', 'rJPos', 'lJVel', 'rJVel', 'lJTorque', 'rJTorque',
 sensors = ['lJPos', 'rJPos', 'lJVel',
            'rJVel', 'gyroX', 'gyroY', 'gyroZ', 'accX',
            'accY', 'accZ', 'nWalk']
+v3_sensors = ['leftJointPosition', 'rightJointPosition','leftJointVelocity', 
+              'rightJointVelocity', 'imuGyroX', 'imuGyroY', 'imuGyroZ', 
+              'imuAccX', 'imuAccY', 'imuAccZ']
 gait_phase = ['leftGaitPhaseX', 'leftGaitPhaseY', 'rightGaitPhaseX', 'rightGaitPhaseY']
 
 def segment_data():
@@ -84,6 +87,7 @@ def find_standing_phase(data):
     standing_indices = np.sort(np.hstack([begin, end]))
     return standing_indices
 
+
 def import_subject_data(subject_list, trial_list):
     """ import data and organize them based on subject and direction (CW/CCW)
 
@@ -115,7 +119,7 @@ def import_subject_data(subject_list, trial_list):
     return data
 
 
-def import_data():
+def import_data(path, header_file):
     """imports all 5 trials of data, take only the columns corresponds to 
     sensors in the sensors list. Format them into dataframe and put them in a
     list.
@@ -124,27 +128,23 @@ def import_data():
         list[Dataframes]: 5 trials of data of shape (M, 10)
     """
 
-    # Read data
-    columns = pd.read_csv('data/columns.txt', header=None)
-    data1 = pd.read_csv('data/trial_1.txt', sep=" ", header=None)
-    data2 = pd.read_csv('data/trial_2.txt', sep=" ", header=None)
-    data3 = pd.read_csv('data/trial_3.txt', sep=" ", header=None)
-    data4 = pd.read_csv('data/trial_4.txt', sep=" ", header=None)
-    data5 = pd.read_csv('data/trial_5.txt', sep=" ", header=None)
+    # Read header
+    headers = np.loadtxt(header_file, dtype=str)
 
     # Format data
-    data_all = [data1, data2, data3, data4, data5]
-    columns_list = columns.transpose().values.tolist()[0]
     data_list = []
-    for data in data_all:
+
+    for file in glob.glob(path + "*"):
+        data = pd.read_csv(file, sep=" ", header=None)
         # drop the 32nd column which only contains NaN values
         data.dropna(axis=1, inplace=True)
         # rename the columns
-        data.columns = columns_list
+        data.columns = headers
         # only keep the 10 sensors data columns
-        data = data[sensors]
+        data = data[v3_sensors]
+        print(data.info())
         data_list.append(data)
-
+        
     return data_list
 
 
