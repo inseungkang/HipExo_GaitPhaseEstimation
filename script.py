@@ -1,119 +1,44 @@
-from data_cleaning import *
-
-# segment_data()
-# manual_scrap_data(5)
-# manual_label_chopped_data(5)
-
-from model_training import *
-from data_processing import *
+from utils import *
+import pickle
 import pandas as pd
-from numpy.random import seed
-import tensorflow as tf
 
-# Seed Random Number Generators for Reproducibility
-seed(1)
-tf.compat.v1.set_random_seed(seed=5)
+path = 'data/strokeData/'
+headers = pd.read_csv('data/strokeData/field_v3.txt')
+subject = 'ST05'
+assistance_levels = ['L0R0', 'L0R1', 'L1R1', 'L2R1', 'L2R2', 'L3R1']
+window_size = 80
 
-subjects = np.arange(1, 3)
-trials = np.arange(1, 5)
-
-path = 'data/evalData/'
-headers = pd.read_csv('data/evalData/headers.txt')
-subject = 8
-method = 'ML'
-
-
-
-# data_list = []
-# for i in [1, 2]:
-#     # For Mannually Labeling Data
-#     filename = path + f'AB{subject}_{method}_{i}.txt'
-#     data = pd.read_csv(filename, skiprows=1, sep=" ")
-#     data = data.dropna(axis=1)
-#     data.columns = headers.columns.str.replace(' ', '')
-#     data = data.loc[:,~data.columns.duplicated()]
-#     data_list.append(data)
-#     print(data.shape)
-# data = pd.concat(data_list)
-# print(data.shape)
-# data.to_csv(path + f'AB{subject}_{method}.txt')
+f = open('data/strokeData/ST05/windowed_L0R0.pkl', 'rb')
+dataset = pickle.load(f)
+split_windowed_dataset(dataset, 'leftGaitPhase', 'splittest')
+# split_dataset(ex_data, 'leftJointPosition', 'test')
+# print(ex_data.head())
+# print(ex_data.columns)
+# manual_scrap_data(ex_data, 'test')
 exit()
-# NOTE: fold supports 3 ways of folding - ZI (ZI data only), BT (BT data only),
-# and ZIBT (ZI+BT for train, BT for validation)
-# NOTE: don't put 'lr' in hyperparam_space to indicate default learning rate
-# for each optimizers
-
-# CNN Model
-# NOTE: don't put 'subject' in hyperparam_space for independent model
-hyperparam_space = {
-    'fold': ['BT'],
-    'window_size': [100],
-    'model': 'cnn',
-    'cnn': {
-      'kernel_size': [10],
-      'activation': ['relu']
-    },
-    'dense': {
-        'activation': ['tanh']
-    },
-    'optimizer': {
-        'loss': ['mean_absolute_error'],
-        'lr': [0.0001],
-        'optimizer': ['adam']
-    },
-    'training': {
-        'epochs': [1],
-        'batch_size': [128]
-    }
-}
-
-# # MLP Model
 # hyperparam_space = {
-#     'subject': subjects,
-#     'fold': ['ZIBT'],
-#     'window_size': [20],
-#     'model': 'mlp',
-#     'dense': {
-#         'num_layers': [1],
-#         'num_nodes': [5],
-#         'activation': ['relu']
-#     },
-#     'optimizer': {
-#         'loss': ['mean_absolute_error'],
-#         'lr': [0.001],
-#         'optimizer': ['adam', 'sgd', 'rmsprop', 'adagrad']
-#     },
-#     'training': {
-#         'epochs': [2],
-#         'batch_size': [128]
-#     }
-# }
-
-# # LSTM Model
-# hyperparam_space = {
-#     'subject': subjects,
 #     'fold': ['BT'],
-#     'window_size': [40],
-#     'model': 'lstm',
-#     'lstm': {
-#       'units': [20],
-#       'activation': ['tanh']
+#     'window_size': [100],
+#     'model': 'cnn',
+#     'cnn': {
+#       'kernel_size': [10],
+#       'activation': ['relu']
 #     },
 #     'dense': {
 #         'activation': ['tanh']
 #     },
 #     'optimizer': {
 #         'loss': ['mean_absolute_error'],
+#         'lr': [0.0001],
 #         'optimizer': ['adam']
 #     },
 #     'training': {
-#         'epochs': [2],
+#         'epochs': [1],
 #         'batch_size': [128]
 #     }
 # }
 
-hyperparameter_configs = get_model_configs_independent(hyperparam_space)
-# print(hyperparameter_configs)
+# hyperparameter_configs = get_model_configs_independent(hyperparam_space)
 
 # data = import_subject_data(subjects, trials)
 
