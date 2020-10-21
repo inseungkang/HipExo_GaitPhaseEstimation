@@ -38,7 +38,8 @@ def window_data(data, window_size, ground_truth_cols):
 		'X': X,
 		'Y': Y,
 		'feature_cols': feature_cols,
-		'ground_truth_cols': ground_truth_cols
+		'ground_truth_cols': ground_truth_cols,
+		'window_size': window_size
 	}
 
 	return windowed_dataset
@@ -101,14 +102,16 @@ def split_windowed_dataset(dataset, column, filename):
 		'X': dataset['X'][:split_ind],
 		'Y': dataset['Y'][:split_ind],
 		'feature_cols': dataset['feature_cols'],
-		'ground_truth_cols': dataset['ground_truth_cols']
+		'ground_truth_cols': dataset['ground_truth_cols'],
+		'window_size': dataset['window_size']
 	}
 
 	right_clip = {
 		'X': dataset['X'][split_ind:],
 		'Y': dataset['Y'][split_ind:],
 		'feature_cols': dataset['feature_cols'],
-		'ground_truth_cols': dataset['ground_truth_cols']
+		'ground_truth_cols': dataset['ground_truth_cols'],
+		'window_size': dataset['window_size']
 	}
 
 	# Save all data for this trial
@@ -120,3 +123,67 @@ def split_windowed_dataset(dataset, column, filename):
 		pickle.dump(right_clip, f)
 		f.close()
 	print('Split and Saved')
+
+def create_training_set(filenames):
+	# Aggregate All Training Datasets
+	X_train = None
+	Y_train = None
+	window_size = None
+	feature_cols = None
+	ground_truth_cols = None
+
+	for filename in filenames:
+		with open(filename+'.pkl', 'rb') as f:
+			data = pickle.load(f)
+			if (type(X_train) == type(None)):
+				X_train = data['X']
+				Y_train = data['Y']
+				window_size = data['window_size']
+				feature_cols = data['feature_cols']
+				ground_truth_cols = data['ground_truth_cols']
+			else:
+				X_train = np.concatenate((X_train, data['X']), axis=0)
+				Y_train = np.concatenate((Y_train, data['Y']), axis=0)
+			f.close()
+
+	training_dataset = {
+		'X': X_train,
+		'Y': Y_train,
+		'feature_cols': feature_cols,
+		'ground_truth_cols': ground_truth_cols,
+		'window_size': window_size
+	}
+
+	return training_dataset
+
+def create_testing_set(filenames):
+	# Aggregate All Training Datasets
+	X_test = None
+	Y_test = None
+	window_size = None
+	feature_cols = None
+	ground_truth_cols = None
+
+	for filename in filenames:
+		with open(filename+'.pkl', 'rb') as f:
+			data = pickle.load(f)
+			if (type(X_test) == type(None)):
+				X_test = data['X']
+				Y_test = data['Y']
+				window_size = data['window_size']
+				feature_cols = data['feature_cols']
+				ground_truth_cols = data['ground_truth_cols']
+			else:
+				X_test = np.concatenate((X_test, data['X']), axis=0)
+				Y_test = np.concatenate((Y_test, data['Y']), axis=0)
+			f.close()
+
+	testing_dataset = {
+		'X': X_test,
+		'Y': Y_test,
+		'feature_cols': feature_cols,
+		'ground_truth_cols': ground_truth_cols,
+		'window_size': window_size
+	}
+
+	return testing_dataset
