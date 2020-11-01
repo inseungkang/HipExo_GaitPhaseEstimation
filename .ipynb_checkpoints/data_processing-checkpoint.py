@@ -1,147 +1,240 @@
 import math
-import matplotlib
+import glob
+import re
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 import scipy
+import matplotlib.pyplot as plt
 from scipy.signal import find_peaks, peak_prominences, peak_widths
 import warnings
 warnings.filterwarnings("ignore")
 
-def import_data(sensors):
-    # Read data
-    columns = pd.read_csv('data/columns.txt', header=None)
-    data1 = pd.read_csv('data/trial_1.txt', sep=" ", header=None)
-    data2 = pd.read_csv('data/trial_2.txt', sep=" ", header=None)
-    data3 = pd.read_csv('data/trial_3.txt', sep=" ", header=None)
-    data4 = pd.read_csv('data/trial_4.txt', sep=" ", header=None)
-    data5 = pd.read_csv('data/trial_5.txt', sep=" ", header=None)
+columns = ['lJPos', 'rJPos', 'lJVel', 'rJVel', 'lJTorque', 'rJTorque',
+           'eulerX', 'eulerY', 'eulerZ', 'gyroX', 'gyroY', 'gyroZ', 'accX', 'accY', 'accZ',
+           'batt', 'cpu', 'mem', 'lBttn', 'rBttn', 'time', 'lJVelFilt', 'rJVelFilt',
+           'lJPosReset', 'rJPosReset', 'lGC', 'rGC', 'stand', 'lCmdTorque', 'rCmdTorque',
+           'lRecvTorque', 'rRecvTorque', 'lStanceSwing', 'rStanceSwing', 'nWalk', 'lWalk', 'rWalk', 'none']
+sensors = ['lJPos', 'rJPos', 'lJVel',
+           'rJVel', 'gyroX', 'gyroY', 'gyroZ', 'accX',
+           'accY', 'accZ']
 
-    # Format data
-    data_all = [data1, data2, data3, data4, data5]
-    columns_list = columns.transpose().values.tolist()[0]
+def segment_data():
+    """load and segment out data from each circuit and cutting out standing data
+    """
+    for subject in range(10, 11):
+        for file_path in glob.glob(f'data/AB{subject:02d}*.txt'):
+            data = pd.read_csv(file_path, sep=" ", header=None)
+            data.columns = columns
+            lJPos, rJPos = extract_joint_positions([data])
+            stand = find_standing_phase(lJPos[0])
+            stand = np.append(stand, len(lJPos[0]) - 1)
+            diff = np.abs(np.diff(stand))
+            diff_ix = [i for i, v in enumerate(diff) if v > 3000]
+            cut_ix = []
+            for i in diff_ix:
+                cut_ix.append(stand[i])
+                cut_ix.append(stand[i+1])
+            data_cut = []
+            for i in range(math.floor((len(cut_ix)/2))):
+                segment = data.iloc[cut_ix[i*2]
+                    :cut_ix[(i*2)+1]+1]
+                data_cut.append(segment)
+                
+            for i, segment in enumerate(data_cut[-5:]):
+                save_file_path = file_path[:9] + '/' + file_path[10:-4] + f'_{i+1}'
+                # np.save(save_file_path, segment)
+            # print(len(data_cut))
+            # print(file_path)
+            # print(len(data_cut))
+    #         print(stand)
+    #         print(diff)
+    #         print(cut_ix)
+    #         print("")
+            # plt.figure(figsize=(10, 5))
+            # plt.plot(lJPos[0])
+            # plt.plot(rJPos[0], 'r')
+            # plt.vlines(cut_ix[-10:], -1, 1)
+            # plt.title(file_path)
+    plt.show()
+
+
+def find_standing_phase(data):
+    ''' 
+    Input: 1D array of joint position data
+    Output: 1D array of indices representing the standing phase segments in the
+    format of [start, end, start, ... end]
+    '''
+
+    diff = np.abs(np.diff(data))
+    threshold = 0.0058
+    diff[diff <= threshold], diff[diff > threshold] = 0, 1
+
+    # use string pattern matching to find the start and end indices of the
+    # standing phases
+    diff_str = ''.join(str(x) for x in diff.astype(int))
+    begin = [m.start() for m in re.finditer(r'10{97}', diff_str)]
+    end = [m.end() for m in re.finditer(r'0{97}1', diff_str)]
+
+    if (np.min(end) < np.min(begin)):
+        begin.append(0)
+    if (np.max(end) < np.max(begin)):
+        end.append(len(data))
+
+    standing_indices = np.sort(np.hstack([begin, end]))
+    return standing_indices
+
+
+def import_data(subject, mode, plot_mode=False):
+    """imports all 5 trials of data, take only the columns corresponds to 
+    sensors in the sensors list. Format them into dataframe and put them in a
+    list.
+    
+    Returns:
+        list[Dataframes]: 5 trials of data of shape (M, 10)
+    """
+    file_path = f'data/AB{subject:02d}/' + mode + '*'
+    
     data_list = []
-    for data in data_all:
-        # drop the 32nd column which only contains NaN values
-        data.dropna(axis=1, inplace=True) 
-        # rename the columns
-        data.columns = columns_list
-        # only keep the 10 sensors data columns
-        data = data[sensors]
-        data_list.append(data)
+    # Read data
+    for file in sorted(glob.glob(file_path)):
+        data = np.load(file)
+        data = pd.DataFrame(data, columns=columns)
 
+        # drop the 32nd column which only contains NaN values
+        data.dropna(axis=1, inplace=True)
+        # only keep the 10 sensors data columns
+        # data = data[sensors]
+        data_list.append(data)
+        lJPos, rJPos = extract_joint_positions([data])
+        lMaximas = find_local_maximas(lJPos[0])
+        print(file)
+        plt.figure(figsize=[9,6.5])
+        plt.plot(lJPos[0])
+        if plot_mode: plt.plot(data['nWalk'])
+        plt.plot(lMaximas, [lJPos[0][i] for i in lMaximas], 'r*')
+        plt.show()
     return data_list
 
 
-def import_labels():
-    # Import labels
-    label1 = pd.read_csv('labels/label_trial1_raw.txt')
-    label2 = pd.read_csv('labels/label_trial2_raw.txt')
-    label3 = pd.read_csv('labels/label_trial3_raw.txt')
-    label4 = pd.read_csv('labels/label_trial4_raw.txt')
-    label5 = pd.read_csv('labels/label_trial5_raw.txt')
-    label_all = [label1, label2, label3, label4, label5]
-    return label_all
+def label_data(data):
+    """Label the data, and combine the data with the label columns
+
+    Args:
+        data (list[Dataframes]): 5 trials of data of shape (M, 10)
+
+    Returns:
+        list[Dataframes]: 5 trials of data of shape (M, 14)
+    """
+    
+    left_joint_positions, right_joint_positions = extract_joint_positions(data)
+
+    labels = []
+    for i in range(5):
+        left_x, left_y = label_vectors(left_joint_positions[i])
+        right_x, right_y = label_vectors(right_joint_positions[i])
+        label_df = pd.DataFrame({'leftGaitPhaseX': left_x, 'leftGaitPhaseY': left_y,
+                                 'rightGaitPhaseX': right_x, 'rightGaitPhaseY': right_y})
+        labels.append(label_df)
+
+    # Combine the data and the labels
+    for d, l in zip(data, labels):
+        d[l.columns] = l
+
+    return data
+
+
+def cut_data(data):
+    """Cut the standing phase of data off and split data into segments
+
+    Args:
+        data (list[Dataframes]): 5 trials of data of shape (M, 14)
+
+    Returns:
+        list[Dataframes]: 10 segments of data of shape (N, 14)
+    """
+    left_joint_positions, right_joint_positions = extract_joint_positions(data)
+
+    # Creat a list of cut_indicies for each trial
+    cut_indicies_list = []
+    for i in range(5):
+        cut_indicies_list.append(find_cutting_indices(left_joint_positions[i],
+                                                      right_joint_positions[i]))
+
+    features_list = []
+    for data, cutting_indices in zip(data, cut_indicies_list):
+        for i in range(math.floor((len(cutting_indices)/2))):
+            features = data.iloc[cutting_indices[i*2]
+                :cutting_indices[(i*2)+1]+1]
+            features_list.append(features)
+    return features_list
 
 
 def extract_joint_positions(data_all):
+    """Extracts the left and right joint position data from each trial and put
+    them in a list
+
+    Args:
+        data_all (list[Dataframes]): data containing sensors information
+
+    Returns:
+        left_joint_positions (list[Series]): left joint positions from each trials
+        right_joint_positions (list[Series]): right joint positions from each trials
+    """
     left_joint_positions, right_joint_positions = [], []
     for data in data_all:
         # create joing position lists
-        left_joint_positions.append(data['leftJointPosition'])
-        right_joint_positions.append(data['rightJointPosition'])
+        left_joint_positions.append(data['lJPos'])
+        right_joint_positions.append(data['rJPos'])
     return left_joint_positions, right_joint_positions
 
 
-def find_local_maximas(data):
+def find_local_maximas(joint_positions):
+    """find the maximas in joint positions
+
+    Args:
+        joint_positions (Series): joint position time seire data
+
+    Returns:
+        [ndarray]: a list of local maximas for joint position
+    """
     # Peak detection using scipy.signal.find_peaks()
 
-    data = data.rolling(10).mean()  # smooth out the data
-    peaks, _ = find_peaks(data)  # find all extremas in the data
+    # joint_positions = joint_positions.rolling(10).mean()  # smooth out the joint positions
+    peaks, _ = find_peaks(joint_positions)  # find all extremas in the joint positions
 
     # find a list of prominences for all extremas
-    prominences = peak_prominences(data, peaks)[0]
-    width = peak_widths(data, peaks)[0]
+    prominences = peak_prominences(joint_positions, peaks)[0]
+    width = peak_widths(joint_positions, peaks)[0]
 
     # find maximas
     # Constrains:   prominance of peaks > median + variance of prominances
-    #               height of peaks > mean(data)
+    #               height of peaks > mean(joint_positions)
     #               distance between peaks > 100 samples
     #               width of peak < mean + 4*std of width
-    maximas, _ = find_peaks(data, prominence=np.median(prominences)+np.var(prominences), height=np.mean(data), distance=100,
-                            wlen=np.mean(width)+4*np.std(width))
-
+    # maximas, _ = find_peaks(joint_positions, prominence=np.median(prominences)+np.var(prominences), 
+    #                         height=np.mean(joint_positions), distance=100,
+    #                         wlen=np.mean(width)+4*np.std(width))
+    maximas, _ = find_peaks(joint_positions, prominence=np.median(prominences) 
+                            + np.var(prominences), distance=130,
+                            height=np.mean(joint_positions)-np.var(joint_positions), 
+                            wlen=np.mean(width)+6*np.std(width))
     return maximas
 
 
-def plot_graph_bi(data_left, data_right):
-    # Plot hip positions and gait cycles for both sides in one graph
-    
-    fig, (gait_cycle, hip_position) = plt.subplots(2,1, sharex=True, figsize=(16, 8))
-    
-    # plot hip positions
-    hip_position.set_xlim(0, data_left.shape[0])
-    hip_position.plot(data_left, 'blue', label='Left')
-    hip_position.plot(data_right, 'red', alpha=0.7, label='right')
-    peaks_left = find_local_maximas(data_left)
-    peaks_right = find_local_maximas(data_right)
-    hip_position.plot(peaks_left, data_left[peaks_left], 'bo')
-    hip_position.plot(peaks_right, data_right[peaks_right], 'ro')
-    hip_position.set_title('Hip Positions')
-    hip_position.legend()
+def label_vectors(joint_positions):
+    """generates the gait phase from a joint position time series data and
+converts to polar coordinates
 
-    # plot gait cycles
-    gait_cycle.set_ylim(0, 1)
-    xl, xr, yl, yr = [0], [0], [0], [0]
-    for peak in peaks_left:
-        xl.append(peak)
-        xl.append(peak+1)
-        yl.append(1)
-        yl.append(0)
-    xl.append(data_left.shape[0])
-    yl.append(0)
-    gait_cycle.plot(xl, yl, 'b-')
-    for peak in peaks_right:
-        xr.append(peak)
-        xr.append(peak+1)
-        yr.append(1)
-        yr.append(0)
-    xr.append(data_right.shape[0])
-    yr.append(0)
-    gait_cycle.plot(xr, yr, 'r-', alpha=0.7)
-    gait_cycle.set_title('Gait Cycles')
+    Args:
+        joint_positions (Series): joint position time seire data
 
-
-def plot_graph_uni(data):
-    # Plot hip positions and gait cycles for one side
-    # data is a 1-D hip position array
-    fig, (gait_cycle, hip_position) = plt.subplots(2,1, sharex=True, figsize=(10, 5))
-    
-    # plot hip positions
-    hip_position.set_xlim(0, data.shape[0])
-    hip_position.plot(data, 'blue')
-    peaks = find_local_maximas(data)
-    hip_position.plot(peaks, data[peaks], 'bx')
-    hip_position.set_title('Hip Positions')
-
-    # plot gait cycles
-    gait_cycle.set_ylim(0, 1)
-    x, y = [0], [0]
-    for peak in peaks:
-        x.append(peak)
-        x.append(peak+1)
-        y.append(1)
-        y.append(0)
-    x.append(data.shape[0])
-    y.append(0)
-    gait_cycle.plot(x, y, 'y-')
-    gait_cycle.set_title('Gait Cycles')
-
-
-def label_vectors(data):
+    Returns:
+        gait_phase_x (float): the polar coordinate x gait phase
+        gait_phase_y (float): the polar coordinate y gait phase
+    """
     # Create label vectors based on joint positions and convert to polar coordinates
-    maximas = find_local_maximas(data)
-    y = pd.Series(np.nan, index=range(0, data.shape[0]))
+    maximas = find_local_maximas(joint_positions)
+    y = pd.Series(np.nan, index=range(0, joint_positions.shape[0]))
     for maxima in maximas:
         y[maxima] = 1
         y[maxima+1] = 0
@@ -152,20 +245,17 @@ def label_vectors(data):
     gait_phase_y = np.sin(y_theta)
     return gait_phase_x, gait_phase_y
 
-def label_vectors_raw(data):
-    # Create label vectors based on joint positions
-    # Does not convert to polar coordinates
-    maximas = find_local_maximas(data)
-    y = pd.Series(np.nan, index=range(0, data.shape[0]))
-    for maxima in maximas:
-        y[maxima] = 1
-        y[maxima+1] = 0
-    y.interpolate(inplace=True)
-    y.fillna(0, inplace=True)
-    return y
-
 
 def find_cutting_indices(left_data, right_data):
+    """generates a list of indices where the data should be cut off
+
+    Args:
+        left_data (Series): left joint position
+        right_data (Series): right joint position
+
+    Returns:
+        ndarray: indices where the data should be cut off at
+    """
     # takes the left and right joint position arrays as input
     # returns a list of indices representing the starting and ending indices of training data to keep [start, end, start, end, ...]
     left_maximas = find_local_maximas(left_data)
@@ -178,7 +268,6 @@ def find_cutting_indices(left_data, right_data):
     for i in range(maximas.shape[0]-1):
         diff.append(maximas[i+1]-maximas[i])
     diff.append(0)
-
     cuts = maximas[diff > (2*np.std(diff)+np.mean(diff))]
     # Starting from peak 2
     peaks_ix = [maximas[1]]
@@ -195,139 +284,92 @@ def find_cutting_indices(left_data, right_data):
     return np.array(peaks_ix)
 
 
-def cut_features(features, cutting_indices):
-    # cut off the rows in between the cutting_indices
-    features_cut = pd.DataFrame(columns=features.columns)
-    for i in range(math.floor((len(cutting_indices)/2))):
-        features_cut = features_cut.append(
-            features.iloc[cutting_indices[i*2]:cutting_indices[(i*2)+1]+1])
-    return features_cut
+def nn_extract_features(data_list, window_size, testing_trial):
+    """feature extraction for regular MLP
+
+    Args:
+        data_list (list[DataFrames]): list of all data of shape (M, 14)
+        window_size (int): window size
+        testing_trial (int): between 1 - 10, represents the test trial
+
+    Returns:
+        dictionary: X_train, X_test - (M, 50); y_train, y_test - (M, 4)
+    """
+    X_train = np.zeros((1, 50))
+    Y_train = np.zeros((1, 4))
+    data_out = {}
+    for i, data in enumerate(data_list):
+        trial_X = data.iloc[:, :-4]
+        trial_Y = data.iloc[:, -4:]
+        if i+1 == testing_trial:
+            feature_extracted_data = pd.DataFrame()
+            for ix, column in enumerate(trial_X.columns):
+                single_column = trial_X.iloc[:, i].values
+                shape_des = single_column.shape[:-1] + \
+                    (single_column.shape[-1] - window_size + 1, window_size)
+                strides_des = single_column.strides + \
+                    (single_column.strides[-1],)
+
+                sliding_window = np.lib.stride_tricks.as_strided(
+                    single_column, shape=shape_des, strides=strides_des)
+                sliding_window_df = pd.DataFrame(sliding_window)
+
+                min_series = sliding_window_df.min(axis=1)
+                max_series = sliding_window_df.max(axis=1)
+                mean_series = sliding_window_df.mean(axis=1)
+                std_series = sliding_window_df.std(axis=1)
+                last_series = sliding_window_df.iloc[:, -1]
+
+                feature_extracted_data = pd.concat([feature_extracted_data, round(min_series, 4), round(max_series, 4), round(
+                    mean_series, 4), round(std_series, 4), round(last_series, 4)], axis=1, ignore_index=True)
+            Y_test = trial_Y.iloc[window_size-1:].to_numpy()
+            data_out['X_test'] = feature_extracted_data
+            data_out['y_test'] = Y_test
+        else:
+            feature_extracted_data = pd.DataFrame()
+            for ix, column in enumerate(trial_X.columns):
+                single_column = trial_X.iloc[:, i].values
+                shape_des = single_column.shape[:-1] + \
+                    (single_column.shape[-1] - window_size + 1, window_size)
+                strides_des = single_column.strides + (single_column.strides[-1],)
+
+                sliding_window = np.lib.stride_tricks.as_strided(
+                    single_column, shape=shape_des, strides=strides_des)
+                sliding_window_df = pd.DataFrame(sliding_window)
+
+                min_series = sliding_window_df.min(axis=1)
+                max_series = sliding_window_df.max(axis=1)
+                mean_series = sliding_window_df.mean(axis=1)
+                std_series = sliding_window_df.std(axis=1)
+                last_series = sliding_window_df.iloc[:, -1]
+
+                feature_extracted_data = pd.concat([feature_extracted_data, round(min_series, 4), round(max_series, 4), round(
+                    mean_series, 4), round(std_series, 4), round(last_series, 4)], axis=1, ignore_index=True)
+            trial_Y = trial_Y.iloc[window_size-1:].to_numpy()
+            X_train = np.concatenate([X_train, feature_extracted_data], axis=0)
+            Y_train = np.concatenate([Y_train, trial_Y], axis=0)
+    data_out['X_train'] = X_train
+    data_out['y_train'] = Y_train
+    return data_out
 
 
-def feature_extraction(data_list, labels_list, window_sizes, sensors, cut=True):
-    # Extracts the features from data based on the list of window sizes
-    # Combine the labels and the features
-    # Cut the standing portion of the data out
-
-    extractions = ['Min', 'Max', 'Std', 'Avg', 'Last']
-    
-    # create a list of feature names
-    feature_columns = []
-    for extraction in extractions:
-        for sensor in sensors:
-            feature_columns.append(sensor+extraction)
-    
-    if cut: left_joint, right_joint = extract_joint_positions(data_list)
-
-    for ix, data, labels in zip(range(1,6), data_list, labels_list):
-        # find the list indices to cut the data
-        if cut: cutting_indices = find_cutting_indices(left_joint[ix-1], 
-            right_joint[ix-1])
-        for window_size in window_sizes:
-            features = pd.DataFrame(columns=feature_columns)
-            if cut: cut_ix = cutting_indices - (window_size-1)
-            for i in range(window_size, data.shape[0]+1):
-                data_window = data[i-window_size:i]
-                feature = data_window.min()
-                feature = feature.append(data_window.max(), ignore_index=True)
-                feature = feature.append(data_window.std(), ignore_index=True)
-                feature = feature.append(data_window.mean(), ignore_index=True)
-                feature = feature.append(data_window.iloc[window_size-1], 
-                    ignore_index=True)
-                features_length = len(features)
-                features.loc[features_length] = feature.tolist()
-            
-            # Combine the features with the labels
-            features[labels.columns] = labels.iloc[window_size-1:].values
-            # Cut features as the cut_ix
-            if cut: featuress = cut_features(features, cut_ix)
-            # Save features as files
-            filename = f'features/trial{ix}_winsize{window_size}.txt'
-            if cut:
-                filename = f'features/cut_trial{ix}_winsize{window_size}.txt'
-            features.to_csv(filename, index=False)
-
-############## functions specificly for CNN ###################
-
-def cnn_cut_data(data_list, cutting_indices_list):
-    '''
-    Params:
-        data_list: list of DataFrames
-        cutting_indicces_list: list of integers representing the start and end
-        of each new data object in the format of [start, end, ... start, end]
-    Return:
-        list of DataFrames containing data objects
-    Split each data in data_list into multiple DatFrames based on the
-    cutting_indices_list.
-    '''
-    features_list = []
-    for data, cutting_indices in zip(data_list, cutting_indices_list):
-        for i in range(math.floor((len(cutting_indices)/2))):
-            features = data.iloc[cutting_indices[i*2]:cutting_indices[(i*2)+1]+1]
-            features_list.append(features)
-    return features_list
-
-def cnn_extract_images(data_list, window_sizes):
-    '''
-    Params:
-        data_list: list of DataFrames
-        window_sizes: list of integers
-    Writes a features file and a labels files to ../features for each 
-    combination of data and window size
-    '''
-    for ix, data in enumerate(data_list):
-        # split features(X) and labels(y)
-        data = data.to_numpy()
-        label_columns = np.arange(10, 14)
-        X = np.delete(data, label_columns, axis=1)
-        y = data[:, label_columns]
-
-        for window_size in window_sizes:
-            filename = f'features/cnn_trial{ix+1}_winsize{window_size}'
-            # Store labels(y) as .npy files
-            # y.shape = (m, 4)
-            label_arr = y[window_size-1:, :]
-            np.save(filename+'_y',label_arr)
-
-            # Extract images from X and store as .npy files
-            # X.shape = (m, win_size, 10, 1)
-            image_arr = None
-            for i in range(window_size, X.shape[0]+1):
-                image = X[i-window_size:i]
-                if image_arr is None: image_arr = image
-                else: image_arr = np.dstack((image_arr, image))
-            image_arr = np.transpose(image_arr, (2, 0, 1))[..., np.newaxis]
-            np.save(filename+'_X', image_arr)
-
-def norm_matrix(data_list):
-    # Output: norm_matrix (2, 10) - features-wise min and max across data in data_list
-    min_full = np.zeros((1, 10))
-    max_full = np.zeros((1, 10))
-    for data in data_list:
-        data = data.to_numpy()
-        trial_X = data[:, :-2]
-        trial_min = np.reshape(trial_X.min(
-            axis=0, keepdims=True), (1, 10))
-        trial_max = np.reshape(trial_X.max(
-            axis=0, keepdims=True), (1, 10))
-        min_full = np.vstack((min_full, trial_min))
-        max_full = np.vstack((max_full, trial_max))
-    min_full = min_full[1:, :].min(axis=0)
-    max_full = max_full[1:, :].max(axis=0)
-    norm_matrix = np.vstack((min_full, max_full))
-    return norm_matrix
-    
-    
 def cnn_extract_features(data_list, window_size, testing_trial):
-#     norm = norm_matrix(data_list)
-#     full_min = np.reshape(norm[0, :], (1, 1, 10))
-#     full_max = np.reshape(norm[1, :], (1, 1, 10))
+    """feature extraction for CNN and LSTM
+
+    Args:
+        data_list (list[DataFrames]): list of all data of shape (M, 14)
+        window_size (int): window size
+        testing_trial (int): between 1 - 10, represents the test trial
+
+    Returns:
+        dictionary: X_train, X_test - (M, window_size, 10); y_train, y_test - (M, 4)
+    """
     
     X_test = np.zeros((1, window_size, 10))
     Y_test = np.zeros((1, 4))
     X_train = np.zeros((1, window_size, 10))
     Y_train = np.zeros((1, 4))
-    data_out = {}     
+    data_out = {}
     for i, data in enumerate(data_list):
         data = data.to_numpy()
         if i+1 == testing_trial:
@@ -335,20 +377,15 @@ def cnn_extract_features(data_list, window_size, testing_trial):
             # raw gp%, not (x,y)
             trial_X = data[:, :-4]
             trial_Y = data[:, -4:]
-            
+
             #Sliding window
-            shape_des = (trial_X.shape[0] - window_size + 1, window_size, trial_X.shape[-1])
+            shape_des = (trial_X.shape[0] - window_size +
+                         1, window_size, trial_X.shape[-1])
             strides_des = (
                 trial_X.strides[0], trial_X.strides[0], trial_X.strides[1])
             trial_X = np.lib.stride_tricks.as_strided(trial_X, shape=shape_des,
-                                                    strides=strides_des)
+                                                      strides=strides_des)
             trial_Y = trial_Y[window_size-1:]
-#             trial_Y_x = np.cos(trial_Y * math.pi * 2)
-#             trial_Y_y = np.sin(trial_Y * math.pi * 2)
-#             trial_Y = np.hstack((trial_Y_x.reshape(
-#                 trial_Y_x.shape[0], 2), trial_Y_y.reshape(trial_Y_y.shape[0], 2)))
-            
-#             trial_X = (trial_X - full_min)/(full_max-full_min)
 
             X_test = np.concatenate([X_test, trial_X], axis=0)
             Y_test = np.concatenate([Y_test, trial_Y], axis=0)
@@ -358,24 +395,20 @@ def cnn_extract_features(data_list, window_size, testing_trial):
 
             data_out['X_test'] = X_test
             data_out['y_test'] = Y_test
-            
+
         else:
             # Generate Training Data
             trial_X = data[:, :-4]
-            trial_Y = data[:,-4:] #raw gp%
+            trial_Y = data[:, -4:]  # raw gp%
 
             #Sliding window
-            shape_des = (trial_X.shape[0] - window_size + 1, window_size, trial_X.shape[-1])
-            strides_des = (trial_X.strides[0], trial_X.strides[0], trial_X.strides[1])
+            shape_des = (trial_X.shape[0] - window_size +
+                         1, window_size, trial_X.shape[-1])
+            strides_des = (
+                trial_X.strides[0], trial_X.strides[0], trial_X.strides[1])
             trial_X = np.lib.stride_tricks.as_strided(trial_X, shape=shape_des,
-                        strides=strides_des)
+                                                      strides=strides_des)
             trial_Y = trial_Y[window_size-1:]
-#             trial_Y_x = np.cos(trial_Y * (math.pi * 2))
-#             trial_Y_y = np.sin(trial_Y * (math.pi * 2))
-#             trial_Y = np.hstack((trial_Y_x, trial_Y_y))
-            # trial_X.shape = (N, winsize, 10), trial_Y.shape = (N, 4)
-
-#             trial_X = (trial_X - full_min)/(full_max-full_min)
 
             X_train = np.concatenate([X_train, trial_X], axis=0)
             Y_train = np.concatenate([Y_train, trial_Y], axis=0)

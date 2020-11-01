@@ -1,6 +1,6 @@
 import math
 import glob
-import re
+import re, sys
 import pandas as pd
 import numpy as np
 import scipy
@@ -16,13 +16,17 @@ columns = ['lJPos', 'rJPos', 'lJVel', 'rJVel', 'lJTorque', 'rJTorque',
            'lRecvTorque', 'rRecvTorque', 'lStanceSwing', 'rStanceSwing', 'nWalk', 'lWalk', 'rWalk', 'none']
 sensors = ['lJPos', 'rJPos', 'lJVel',
            'rJVel', 'gyroX', 'gyroY', 'gyroZ', 'accX',
-           'accY', 'accZ']
+           'accY', 'accZ', 'nWalk']
+v3_sensors = ['leftJointPosition', 'rightJointPosition','leftJointVelocity', 
+              'rightJointVelocity', 'imuGyroX', 'imuGyroY', 'imuGyroZ', 
+              'imuAccX', 'imuAccY', 'imuAccZ']
+gait_phase = ['leftGaitPhaseX', 'leftGaitPhaseY', 'rightGaitPhaseX', 'rightGaitPhaseY']
 
 def segment_data():
     """load and segment out data from each circuit and cutting out standing data
     """
     for subject in range(10, 11):
-        for file_path in glob.glob(f'data/AB{subject:02d}*.txt'):
+        for file_path in glob.glob(f'data/raw/AB{subject:02d}*.txt'):
             data = pd.read_csv(file_path, sep=" ", header=None)
             data.columns = columns
             lJPos, rJPos = extract_joint_positions([data])
@@ -50,11 +54,11 @@ def segment_data():
     #         print(diff)
     #         print(cut_ix)
     #         print("")
-            # plt.figure(figsize=(10, 5))
-            # plt.plot(lJPos[0])
-            # plt.plot(rJPos[0], 'r')
-            # plt.vlines(cut_ix[-10:], -1, 1)
-            # plt.title(file_path)
+            plt.figure(figsize=(10, 5))
+            plt.plot(lJPos[0])
+            plt.plot(rJPos[0], 'r')
+            plt.vlines(cut_ix[-10:], -1, 1)
+            plt.title(file_path)
     plt.show()
 
 
@@ -84,7 +88,38 @@ def find_standing_phase(data):
     return standing_indices
 
 
-def import_data():
+def import_subject_data(subject_list, trial_list):
+    """ import data and organize them based on subject and direction (CW/CCW)
+
+    Args:
+        subject_list (list[int]): a list of subject numbers
+
+    Returns:
+        dict{dict{dict{list[DataFrames]}}}: ex: data = {'AB01': {'ZICW': {1: [dataframe,
+        ...], 2: [dataframe, ...]}, 'BTCCW': {1: [dataframe, ...]}, 'AB02': {...} }
+    """
+    
+    data = {}
+    for subject in subject_list:
+        subject_data = {}
+        for condition in ['ZI', 'BT']:
+            for direction in ['CW', 'CCW']:
+                trial_dict = {}
+                for trial in trial_list:
+                    file_path = f'data/AB{subject:02d}/labeled*_' + direction + '_' + condition + '_' + str(trial) + '*'
+                    # Read data
+                    data_list = []
+                    for file in sorted(glob.glob(file_path)):
+                        trial_data = np.loadtxt(file)
+                        trial_data = pd.DataFrame(trial_data, columns=sensors+gait_phase)
+                        data_list.append(trial_data)
+                    trial_dict[trial] = data_list
+                subject_data[condition+direction] = trial_dict
+        data[f'AB{subject:02d}'] = subject_data
+    return data
+
+
+def import_data(path, header_file):
     """imports all 5 trials of data, take only the columns corresponds to 
     sensors in the sensors list. Format them into dataframe and put them in a
     list.
@@ -93,36 +128,30 @@ def import_data():
         list[Dataframes]: 5 trials of data of shape (M, 10)
     """
 
-    # Read data
-    columns = pd.read_csv('data/columns.txt', header=None)
-    data1 = pd.read_csv('data/trial_1.txt', sep=" ", header=None)
-    data2 = pd.read_csv('data/trial_2.txt', sep=" ", header=None)
-    data3 = pd.read_csv('data/trial_3.txt', sep=" ", header=None)
-    data4 = pd.read_csv('data/trial_4.txt', sep=" ", header=None)
-    data5 = pd.read_csv('data/trial_5.txt', sep=" ", header=None)
+    # Read header
+    headers = np.loadtxt(header_file, dtype=str)
 
     # Format data
-    data_all = [data1, data2, data3, data4, data5]
-    columns_list = columns.transpose().values.tolist()[0]
     data_list = []
-    for data in data_all:
+
+    for file in glob.glob(path + "*"):
+        data = pd.read_csv(file, sep=" ", header=None)
         # drop the 32nd column which only contains NaN values
         data.dropna(axis=1, inplace=True)
         # rename the columns
-        data.columns = columns_list
+        data.columns = headers
         # only keep the 10 sensors data columns
-        data = data[sensors]
+        data = data[v3_sensors]
+        print(data.info())
         data_list.append(data)
-
+        
     return data_list
 
 
 def label_data(data):
     """Label the data, and combine the data with the label columns
-
     Args:
         data (list[Dataframes]): 5 trials of data of shape (M, 10)
-
     Returns:
         list[Dataframes]: 5 trials of data of shape (M, 14)
     """
@@ -184,8 +213,10 @@ def extract_joint_positions(data_all):
     left_joint_positions, right_joint_positions = [], []
     for data in data_all:
         # create joing position lists
-        left_joint_positions.append(data['lJPos'])
-        right_joint_positions.append(data['rJPos'])
+        # left_joint_positions.append(data['lJPos'])
+        # right_joint_positions.append(data['rJPos'])
+        left_joint_positions.append(data['leftJointPosition'])
+        right_joint_positions.append(data['rightJointPosition'])        
     return left_joint_positions, right_joint_positions
 
 
@@ -200,7 +231,7 @@ def find_local_maximas(joint_positions):
     """
     # Peak detection using scipy.signal.find_peaks()
 
-    joint_positions = joint_positions.rolling(10).mean()  # smooth out the joint positions
+    # joint_positions = joint_positions.rolling(10).mean()  # smooth out the joint positions
     peaks, _ = find_peaks(joint_positions)  # find all extremas in the joint positions
 
     # find a list of prominences for all extremas
@@ -212,15 +243,15 @@ def find_local_maximas(joint_positions):
     #               height of peaks > mean(joint_positions)
     #               distance between peaks > 100 samples
     #               width of peak < mean + 4*std of width
-    maximas, _ = find_peaks(joint_positions, prominence=np.median(prominences)+np.var(prominences), 
-                            height=np.mean(joint_positions), distance=100,
-                            wlen=np.mean(width)+4*np.std(width))
-    return maximas
+    maximas, _ = find_peaks(joint_positions, 
+                            prominence=np.median(prominences)+np.var(prominences), 
+                            distance=150)
+    return maximas.tolist()
 
 
 def label_vectors(joint_positions):
     """generates the gait phase from a joint position time series data and
-converts to polar coordinates
+    converts to polar coordinates
 
     Args:
         joint_positions (Series): joint position time seire data
@@ -296,7 +327,9 @@ def nn_extract_features(data_list, window_size, testing_trial):
     Y_train = np.zeros((1, 4))
     data_out = {}
     for i, data in enumerate(data_list):
+        # mode = data['nWalk']
         trial_X = data.iloc[:, :-4]
+        # trial_X = trial_X.drop(['nWalk'])
         trial_Y = data.iloc[:, -4:]
         if i+1 == testing_trial:
             feature_extracted_data = pd.DataFrame()
@@ -352,12 +385,10 @@ def nn_extract_features(data_list, window_size, testing_trial):
 
 def cnn_extract_features(data_list, window_size, testing_trial):
     """feature extraction for CNN and LSTM
-
     Args:
         data_list (list[DataFrames]): list of all data of shape (M, 14)
         window_size (int): window size
         testing_trial (int): between 1 - 10, represents the test trial
-
     Returns:
         dictionary: X_train, X_test - (M, window_size, 10); y_train, y_test - (M, 4)
     """
@@ -415,4 +446,301 @@ def cnn_extract_features(data_list, window_size, testing_trial):
     data_out['X_train'] = X_train
     data_out['y_train'] = Y_train
 
+    return data_out
+
+
+def nn_extract_features_subject(subject_data, window_size, test_trial, fold):
+    
+    testing_data = []
+    training_data = []  
+    if fold == 'ZI':
+        for condition in ['ZICW','ZICCW']:
+            for trial in subject_data[condition].keys():
+                training_data.extend(subject_data[condition][trial])
+        for condition in ['BTCW', 'BTCCW']:
+            testing_data.extend(subject_data[condition][test_trial])
+    elif fold == 'BT':
+        for condition in ['BTCW','BTCCW']:
+            for trial in subject_data[condition].keys():
+                if trial == test_trial:
+                    testing_data.extend(subject_data[condition][trial])
+                else:
+                    training_data.extend(subject_data[condition][trial])
+    elif fold == 'ZIBT':
+        for condition in subject_data.keys():
+            for trial in subject_data[condition].keys():
+                if condition in ['BTCW', 'BTCCW']:
+                    if trial == test_trial:
+                        testing_data.extend(subject_data[condition][trial])
+                    else:
+                        training_data.extend(subject_data[condition][trial])
+                else:
+                    training_data.extend(subject_data[condition][trial])
+   
+    X_test = np.zeros((1, 50))
+    Y_test = np.zeros((1, 4))
+    X_train = np.zeros((1, 50))
+    Y_train = np.zeros((1, 4))
+    mode = np.zeros((1))
+    data_out = {}
+    
+    # Generate testing data
+    for i, data in enumerate(testing_data):
+        if 'nWalk' in data.columns:
+            nWalk = data['nWalk']
+            data = data.drop(columns='nWalk')
+ 
+        trial_X = data.iloc[:, :-4]
+        trial_Y = data.iloc[:, -4:]
+
+        feature_extracted_data = pd.DataFrame()
+        for ix, column in enumerate(trial_X.columns):
+            single_column = trial_X.iloc[:, ix].values
+            shape_des = single_column.shape[:-1] + \
+                (single_column.shape[-1] - window_size + 1, window_size)
+            strides_des = single_column.strides + (single_column.strides[-1],)
+
+            sliding_window = np.lib.stride_tricks.as_strided(
+                single_column, shape=shape_des, strides=strides_des)
+            sliding_window_df = pd.DataFrame(sliding_window)
+
+            min_series = sliding_window_df.min(axis=1)
+            max_series = sliding_window_df.max(axis=1)
+            mean_series = sliding_window_df.mean(axis=1)
+            std_series = sliding_window_df.std(axis=1)
+            last_series = sliding_window_df.iloc[:, -1]
+
+            feature_extracted_data = pd.concat([feature_extracted_data, round(min_series, 4), round(max_series, 4), round(
+                mean_series, 4), round(std_series, 4), round(last_series, 4)], axis=1, ignore_index=True)
+        if nWalk is not None:
+            nWalk = nWalk.iloc[window_size-1:].to_numpy()
+            mode = np.concatenate([mode, nWalk])
+        trial_Y = trial_Y.iloc[window_size-1:].to_numpy()
+        X_test = np.concatenate([X_test, feature_extracted_data], axis=0)
+        Y_test = np.concatenate([Y_test, trial_Y], axis=0)
+    X_test = X_test[1:, :]
+    Y_test = Y_test[1:, :]
+    data_out['X_test'] = X_test
+    data_out['y_test'] = Y_test
+    if len(mode) > 1:
+        mode = mode[1:]
+        data_out['mode'] = mode
+    
+    # Generate training data
+    for i, data in enumerate(training_data):
+        if 'nWalk' in data.columns:
+            data = data.drop(columns='nWalk')
+        trial_X = data.iloc[:, :-4]
+        trial_Y = data.iloc[:, -4:]
+
+        feature_extracted_data = pd.DataFrame()
+        for ix, column in enumerate(trial_X.columns):
+            single_column = trial_X.iloc[:, ix].values
+            shape_des = single_column.shape[:-1] + \
+                (single_column.shape[-1] - window_size + 1, window_size)
+            strides_des = single_column.strides + (single_column.strides[-1],)
+
+            sliding_window = np.lib.stride_tricks.as_strided(
+                single_column, shape=shape_des, strides=strides_des)
+            sliding_window_df = pd.DataFrame(sliding_window)
+
+            min_series = sliding_window_df.min(axis=1)
+            max_series = sliding_window_df.max(axis=1)
+            mean_series = sliding_window_df.mean(axis=1)
+            std_series = sliding_window_df.std(axis=1)
+            last_series = sliding_window_df.iloc[:, -1]
+
+            feature_extracted_data = pd.concat([feature_extracted_data, round(min_series, 4), round(max_series, 4), round(
+                mean_series, 4), round(std_series, 4), round(last_series, 4)], axis=1, ignore_index=True)
+        trial_Y = trial_Y.iloc[window_size-1:].to_numpy()
+        X_train = np.concatenate([X_train, feature_extracted_data], axis=0)
+        Y_train = np.concatenate([Y_train, trial_Y], axis=0)
+    X_train = X_train[1:, :]
+    Y_train = Y_train[1:, :]
+    data_out['X_train'] = X_train
+    data_out['y_train'] = Y_train
+    return data_out
+
+def cnn_extract_features_subject(subject_data, window_size, test_trial, fold):
+    testing_data = []
+    training_data = []  
+    if fold == 'ZI':
+        for condition in ['ZICW','ZICCW']:
+            for trial in subject_data[condition].keys():
+                training_data.extend(subject_data[condition][trial])
+        for condition in ['BTCW', 'BTCCW']:
+            testing_data.extend(subject_data[condition][test_trial])
+    elif fold == 'BT':
+        for condition in ['BTCW','BTCCW']:
+            for trial in subject_data[condition].keys():
+                if trial == test_trial:
+                    testing_data.extend(subject_data[condition][trial])
+                else:
+                    training_data.extend(subject_data[condition][trial])
+    elif fold == 'ZIBT':
+        for condition in subject_data.keys():
+            for trial in subject_data[condition].keys():
+                if condition in ['BTCW', 'BTCCW']:
+                    if trial == test_trial:
+                        testing_data.extend(subject_data[condition][trial])
+                    else:
+                        training_data.extend(subject_data[condition][trial])
+                else:
+                    training_data.extend(subject_data[condition][trial])
+    print(len(training_data))
+    X_test = np.zeros((1, window_size, 10))
+    Y_test = np.zeros((1, 4))
+    X_train = np.zeros((1, window_size, 10))
+    Y_train = np.zeros((1, 4))
+    mode = np.zeros((1))
+    data_out = {}
+    
+    # Generate testing data
+    for i, data in enumerate(testing_data):
+        if 'nWalk' in data.columns:
+            nWalk = data['nWalk']
+            data = data.drop(columns='nWalk')
+
+        data = data.to_numpy()
+        
+        trial_X = data[:, :-4]
+        trial_Y = data[:, -4:]
+        
+        #Sliding window
+        shape_des = (trial_X.shape[0] - window_size +
+                    1, window_size, trial_X.shape[-1])
+        strides_des = (
+            trial_X.strides[0], trial_X.strides[0], trial_X.strides[1])
+        trial_X = np.lib.stride_tricks.as_strided(trial_X, shape=shape_des,
+                                                strides=strides_des)
+            
+        trial_Y = trial_Y[window_size-1:]
+
+        X_test = np.concatenate([X_test, trial_X], axis=0)
+        Y_test = np.concatenate([Y_test, trial_Y], axis=0)
+        if nWalk is not None:
+            nWalk = nWalk.iloc[window_size-1:].to_numpy()
+            mode = np.concatenate([mode, nWalk])
+    
+    X_test = X_test[1:, :, :]
+    Y_test = Y_test[1:, :]
+
+    data_out['X_test'] = X_test
+    data_out['y_test'] = Y_test
+
+    if len(mode) > 1:
+        mode = mode[1:]
+        data_out['mode'] = mode
+    
+    # Generate Training Data
+    for i, data in enumerate(training_data):
+        if 'nWalk' in data.columns:
+            data = data.drop(columns='nWalk')
+        
+        data = data.to_numpy()
+        
+        trial_X = data[:, :-4]
+        trial_Y = data[:, -4:]
+
+        #Sliding window
+        shape_des = (trial_X.shape[0] - window_size +
+                        1, window_size, trial_X.shape[-1])
+        strides_des = (
+            trial_X.strides[0], trial_X.strides[0], trial_X.strides[1])
+        trial_X = np.lib.stride_tricks.as_strided(trial_X, shape=shape_des,
+                                                    strides=strides_des)
+        trial_Y = trial_Y[window_size-1:]
+
+        X_train = np.concatenate([X_train, trial_X], axis=0)
+        Y_train = np.concatenate([Y_train, trial_Y], axis=0)
+
+    X_train = X_train[1:, :, :]
+    Y_train = Y_train[1:, :]
+    data_out['X_train'] = X_train
+    data_out['y_train'] = Y_train
+    return data_out
+
+def cnn_extract_features_independent(data_list, window_size, test_subject):
+    testing_data = []
+    training_data = []
+    for subject in data_list.keys():
+        if subject == test_subject:
+            for condition in ['BTCW','BTCCW']:
+                for trial in data_list[subject][condition].keys():
+                    testing_data.extend(data_list[subject][condition][trial])
+        else:
+            for condition in ['BTCW','BTCCW']:
+                for trial in data_list[subject][condition].keys():
+                    training_data.extend(data_list[subject][condition][trial])
+   
+    X_test = np.zeros((1, window_size, 10))
+    Y_test = np.zeros((1, 4))
+    X_train = np.zeros((1, window_size, 10))
+    Y_train = np.zeros((1, 4))
+    mode = np.zeros((1))
+    data_out = {}
+    
+    # Generate testing data
+    for i, data in enumerate(testing_data):
+        if 'nWalk' in data.columns:
+            nWalk = data['nWalk']
+            data = data.drop(columns='nWalk')
+
+        data = data.to_numpy()
+        
+        trial_X = data[:, :-4]
+        trial_Y = data[:, -4:]
+        
+        #Sliding window
+        shape_des = (trial_X.shape[0] - window_size +
+                    1, window_size, trial_X.shape[-1])
+        strides_des = (
+            trial_X.strides[0], trial_X.strides[0], trial_X.strides[1])
+        trial_X = np.lib.stride_tricks.as_strided(trial_X, shape=shape_des,
+                                                strides=strides_des)
+            
+        trial_Y = trial_Y[window_size-1:]
+
+        X_test = np.concatenate([X_test, trial_X], axis=0)
+        Y_test = np.concatenate([Y_test, trial_Y], axis=0)
+        if nWalk is not None:
+            nWalk = nWalk.iloc[window_size-1:].to_numpy()
+            mode = np.concatenate([mode, nWalk])
+    
+    X_test = X_test[1:, :, :]
+    Y_test = Y_test[1:, :]
+
+    data_out['X_test'] = X_test
+    data_out['y_test'] = Y_test
+
+    if len(mode) > 1:
+        mode = mode[1:]
+        data_out['mode'] = mode
+    
+    # Generate Training Data
+    for i, data in enumerate(training_data):
+        if 'nWalk' in data.columns:
+            data = data.drop(columns='nWalk')
+        
+        data = data.to_numpy()
+        
+        trial_X = data[:, :-4]
+        trial_Y = data[:, -4:]
+
+        #Sliding window
+        shape_des = (trial_X.shape[0] - window_size +
+                        1, window_size, trial_X.shape[-1])
+        strides_des = (
+            trial_X.strides[0], trial_X.strides[0], trial_X.strides[1])
+        trial_X = np.lib.stride_tricks.as_strided(trial_X, shape=shape_des,
+                                                    strides=strides_des)
+        trial_Y = trial_Y[window_size-1:]
+
+        X_train = np.concatenate([X_train, trial_X], axis=0)
+        Y_train = np.concatenate([Y_train, trial_Y], axis=0)
+
+    X_train = X_train[1:, :, :]
+    Y_train = Y_train[1:, :]
+    data_out['X_train'] = X_train
+    data_out['y_train'] = Y_train
     return data_out
