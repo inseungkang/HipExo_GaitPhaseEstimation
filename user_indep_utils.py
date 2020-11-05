@@ -248,6 +248,50 @@ def cnn_model(window_size, n_features, cnn_config, dense_config, optim_config, X
     model.compile(**optim_config)
     return model
 
+# Creates a deeper CNN model based on the specified configuration
+def big_cnn_model(window_size, n_features, cnn_config, dense_config, optim_config, X_train):
+    conv_kernel = cnn_config['kernel_size']
+    model = Sequential()
+    # norm_layer = Normalization(input_shape=(window_size, n_features))
+    # norm_layer.adapt(X_train)
+    # model.add(norm_layer)
+    model.add(BatchNormalization(input_shape=(window_size, n_features)))
+    model.add(Conv1D(10,
+                conv_kernel,
+                input_shape=(window_size, n_features),
+                kernel_initializer=he_uniform(seed=1),
+                bias_initializer=he_uniform(seed=11)))
+    model.add(Conv1D(10,(int)(np.ceil(0.75*conv_kernel)),
+                input_shape=(window_size, n_features),
+                kernel_initializer=he_uniform(seed=1),
+                bias_initializer=he_uniform(seed=11)))
+    model.add(Conv1D(10,(int)(np.ceil(0.5*conv_kernel)),
+                input_shape=(window_size, n_features),
+                kernel_initializer=he_uniform(seed=1),
+                bias_initializer=he_uniform(seed=11)))
+    model.add(Conv1D(10,
+                (int)(window_size - conv_kernel + 1 - np.ceil(0.75*conv_kernel)
+                 + 1 - np.ceil(0.5*conv_kernel) + 1),
+                kernel_initializer=he_uniform(seed=25),
+                bias_initializer=he_uniform(seed=91)))
+    model.add(Activation(cnn_config['activation']))
+    model.add(Flatten())
+    model.add(Dense(10,
+                dense_config['activation'],
+                kernel_initializer=he_uniform(seed=74),
+                bias_initializer=he_uniform(seed=52)))
+    model.add(Dense(10,
+                dense_config['activation'],
+                kernel_initializer=he_uniform(seed=74),
+                bias_initializer=he_uniform(seed=52)))
+    model.add(Dense(4,
+                dense_config['activation'],
+                kernel_initializer=he_uniform(seed=74),
+                bias_initializer=he_uniform(seed=52)))
+    model.compile(**optim_config)
+    return model
+
+
 # Creates an MLP model based on the specified configuration
 def mlp_model(n_features, dense_config, optim_config, X_train):
     model = Sequential()
@@ -360,6 +404,44 @@ def create_model_subject(model_config, dataset):
     else:
         raise Exception('No model generator for model type')
 
+# Creates the appropriate model based on the configuration
+def create_big_model_subject(model_config, dataset):
+    if 'lr' in model_config['optimizer']:
+        lr = model_config['optimizer']['lr']
+        optim_config = {k:v for (k, v) in model_config['optimizer'].items() if k != 'lr'}
+        if optim_config['optimizer'] == 'adam':
+            optim_config['optimizer'] = Adam(learning_rate=lr)
+        if optim_config['optimizer'] == 'sgd':
+            optim_config['optimizer'] = SGD(learning_rate=lr)
+        if optim_config['optimizer'] == 'adagrad':
+            optim_config['optimizer'] = Adagrad(learning_rate=lr)
+        if optim_config['optimizer'] == 'rmsprop':
+            optim_config['optimizer'] = RMSprop(learning_rate=lr)
+    else:
+        optim_config = model_config['optimizer']
+    if (model_config['model'] == 'lstm'):
+        return lstm_model(sequence_length=model_config['window_size'],
+                          n_features=10, 
+                           lstm_config=model_config['lstm'],
+                           dense_config=model_config['dense'],
+                           optim_config=optim_config,
+                           X_train=dataset['X_train'].squeeze())
+    elif (model_config['model'] == 'cnn'):
+        return big_cnn_model(window_size=model_config['window_size'],
+                         n_features=10,
+                         cnn_config=model_config['cnn'],
+                         dense_config=model_config['dense'],
+                         optim_config=optim_config,
+                         X_train=dataset['X_train'])
+    elif (model_config['model'] == 'mlp'):
+        return mlp_model(n_features=50,
+                         dense_config=model_config['dense'],
+                         optim_config=optim_config,
+                         X_train=dataset['X_train'])
+    else:
+        raise Exception('No model generator for model type')
+
+
 def train_models_independent(model_type, hyperparameter_configs, data):
     results = []
     for model_config in hyperparameter_configs:
@@ -371,6 +453,64 @@ def train_models_independent(model_type, hyperparameter_configs, data):
         for test_subject in subjects:
             dataset = get_dataset_independent(model_type, data, model_config['window_size'], test_subject)
             model = create_model_subject(model_config.copy(), dataset)
+            model.summary()
+            early_stopping_callback = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=0)
+            model_hist = model.fit(dataset['X_train'], dataset['y_train'], verbose=1, validation_split=0.2, shuffle=True, callbacks= [early_stopping_callback], **model_config['training'])
+
+            predictions = model.predict(dataset['X_test'])
+            left_rmse, right_rmse = custom_rmse(dataset['y_test'], predictions)
+
+            current_result['left_validation_rmse'].append(left_rmse)
+            current_result['right_validation_rmse'].append(right_rmse)
+            clear_session()
+        results.append(current_result)
+    
+    per_trial_results = []
+    for trial in results:
+        left_val_rmse = trial['left_validation_rmse']
+        right_val_rmse = trial['right_validation_rmse']
+        for i, test_subject in enumerate(data.keys()):
+            trial_result = {}
+            trial_result['test_subject'] = test_subject
+            trial_result['window_size'] = trial['model_config']['window_size']
+
+            if (model_type != 'mlp'):
+                for key in trial['model_config'][model_type].keys():
+                    trial_result['{}_{}'.format(model_type, key)] = trial['model_config'][model_type][key]
+
+            for key in trial['model_config']['dense'].keys():
+                trial_result['dense_{}'.format(key)] = trial['model_config']['dense'][key]
+
+            for key in trial['model_config']['optimizer'].keys():
+                trial_result['optim_{}'.format(key)] = trial['model_config']['optimizer'][key]
+
+            for key in trial['model_config']['training'].keys():
+                trial_result['training_{}'.format(key)] = trial['model_config']['training'][key]
+            trial_result['left_validation_rmse'] = left_val_rmse[i-1]
+            trial_result['right_validation_rmse'] = right_val_rmse[i-1]
+            per_trial_results.append(trial_result)
+    df_per_trial_results = pd.DataFrame(per_trial_results)
+
+    for model in results:
+        model['left_rmse_mean'] = np.mean(model['left_validation_rmse'])
+        model['right_rmse_mean'] = np.mean(model['right_validation_rmse'])
+                
+    averaged_results = list(map(results_mapper_indep, results))
+    df_results = pd.DataFrame(averaged_results)
+    return (df_per_trial_results, df_results)
+
+
+def train_big_models_independent(model_type, hyperparameter_configs, data):
+    results = []
+    for model_config in hyperparameter_configs:
+        current_result = {}
+        current_result['model_config'] = model_config
+        current_result['left_validation_rmse'] = []
+        current_result['right_validation_rmse'] = []
+        subjects = data.keys()
+        for test_subject in subjects:
+            dataset = get_dataset_independent(model_type, data, model_config['window_size'], test_subject)
+            model = create_big_model_subject(model_config.copy(), dataset)
             model.summary()
             early_stopping_callback = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=0)
             model_hist = model.fit(dataset['X_train'], dataset['y_train'], verbose=1, validation_split=0.2, shuffle=True, callbacks= [early_stopping_callback], **model_config['training'])

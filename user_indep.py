@@ -30,7 +30,7 @@ for subj in subjects:
 
 # List hyperparameters to sweep
 hyperparam_space = {
-	'window_size': [40, 80, 100, 120, 140, 160, 180, 200],
+	'window_size': [80, 100, 120, 140, 160, 180, 200],
 	'model': 'cnn',
 	'cnn': {
 	  'kernel_size': [10, 20, 30],
@@ -52,7 +52,7 @@ hyperparam_space = {
 hyperparameter_configs = get_model_configs_independent(hyperparam_space)
 
 # Train models and evaluate
-trial_results, average_results = train_models_independent(hyperparam_space['model'], hyperparameter_configs, data_list)
+trial_results, average_results = train_big_models_independent(hyperparam_space['model'], hyperparameter_configs, data_list)
 
 # Store results in file
 trial_results.to_csv('trial_results.csv')
