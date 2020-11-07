@@ -250,40 +250,46 @@ def cnn_model(window_size, n_features, cnn_config, dense_config, optim_config, X
 
 # Creates a deeper CNN model based on the specified configuration
 def big_cnn_model(window_size, n_features, cnn_config, dense_config, optim_config, X_train):
+    print(cnn_config)
     conv_kernel = cnn_config['kernel_size']
+    layers = cnn_config['layers'] - 2
+    output_kernel = window_size - conv_kernel + 1
+    
     model = Sequential()
-    # norm_layer = Normalization(input_shape=(window_size, n_features))
-    # norm_layer.adapt(X_train)
-    # model.add(norm_layer)
+    
     model.add(BatchNormalization(input_shape=(window_size, n_features)))
     model.add(Conv1D(10,
                 conv_kernel,
                 input_shape=(window_size, n_features),
                 kernel_initializer=he_uniform(seed=1),
                 bias_initializer=he_uniform(seed=11)))
-    model.add(Conv1D(10,(int)(np.ceil(0.75*conv_kernel)),
+    
+    kernel_factor = 0.75
+    while layers:
+        kernel_size = (int)(np.ceil(kernel_factor * conv_kernel))
+        output_kernel -= kernel_size - 1
+        model.add(Conv1D(10,
+                kernel_size,
                 input_shape=(window_size, n_features),
                 kernel_initializer=he_uniform(seed=1),
                 bias_initializer=he_uniform(seed=11)))
-    model.add(Conv1D(10,(int)(np.ceil(0.5*conv_kernel)),
-                input_shape=(window_size, n_features),
-                kernel_initializer=he_uniform(seed=1),
-                bias_initializer=he_uniform(seed=11)))
-    model.add(Conv1D(10,
-                (int)(window_size - conv_kernel + 1 - np.ceil(0.75*conv_kernel)
-                 + 1 - np.ceil(0.5*conv_kernel) + 1),
+        layers -= 1
+        kernel_factor -= 0.25
+    
+    output_kernel -= cnn_config['output_size'] - 1
+    model.add(Conv1D(10, (int)(output_kernel),
                 kernel_initializer=he_uniform(seed=25),
                 bias_initializer=he_uniform(seed=91)))
     model.add(Activation(cnn_config['activation']))
     model.add(Flatten())
-    model.add(Dense(10,
-                dense_config['activation'],
-                kernel_initializer=he_uniform(seed=74),
-                bias_initializer=he_uniform(seed=52)))
-    model.add(Dense(10,
-                dense_config['activation'],
-                kernel_initializer=he_uniform(seed=74),
-                bias_initializer=he_uniform(seed=52)))
+    
+    dense_layers = dense_config['layers']
+    while dense_layers:
+        model.add(Dense(10,
+                    dense_config['activation'],
+                    kernel_initializer=he_uniform(seed=74),
+                    bias_initializer=he_uniform(seed=52)))
+        dense_layers -= 1
     model.add(Dense(4,
                 dense_config['activation'],
                 kernel_initializer=he_uniform(seed=74),
