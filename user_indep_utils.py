@@ -111,9 +111,9 @@ def cnn_extract_features_independent(data_list, window_size, test_subject):
         else:
             training_data.append(data_list[subject])
        
-    X_test = np.zeros((1, window_size, 10))
+    X_test = np.zeros((1, window_size, 12))
     Y_test = np.zeros((1, 4))
-    X_train = np.zeros((1, window_size, 10))
+    X_train = np.zeros((1, window_size, 12))
     Y_train = np.zeros((1, 4))
     data_out = {}
     
@@ -142,6 +142,41 @@ def cnn_extract_features_independent(data_list, window_size, test_subject):
 
     data_out['X_test'] = X_test
     data_out['y_test'] = Y_test
+    
+    # Generate Training Data
+    for i, data in enumerate(training_data):       
+        data = data.to_numpy()
+        
+        trial_X = data[:, :-4]
+        trial_Y = data[:, -4:]
+
+        #Sliding window
+        shape_des = (trial_X.shape[0] - window_size +
+                        1, window_size, trial_X.shape[-1])
+        strides_des = (
+            trial_X.strides[0], trial_X.strides[0], trial_X.strides[1])
+        trial_X = np.lib.stride_tricks.as_strided(trial_X, shape=shape_des,
+                                                    strides=strides_des)
+        trial_Y = trial_Y[window_size-1:]
+
+        X_train = np.concatenate([X_train, trial_X], axis=0)
+        Y_train = np.concatenate([Y_train, trial_Y], axis=0)
+
+    X_train = X_train[1:, :, :]
+    Y_train = Y_train[1:, :]
+    data_out['X_train'] = X_train
+    data_out['y_train'] = Y_train
+    return data_out
+
+def deploy_cnn_extract_features_independent(data_list, window_size):
+    testing_data = []
+    training_data = []
+    for subject in data_list.keys():
+        training_data.append(data_list[subject])
+       
+    X_train = np.zeros((1, window_size, 10))
+    Y_train = np.zeros((1, 4))
+    data_out = {}
     
     # Generate Training Data
     for i, data in enumerate(training_data):       
@@ -283,9 +318,10 @@ def big_cnn_model(window_size, n_features, cnn_config, dense_config, optim_confi
     model.add(Activation(cnn_config['activation']))
     model.add(Flatten())
     
-    dense_layers = dense_config['layers']
+    dense_layers = dense_config['layers'][0]
+    dense_nodes = dense_config['layers'][1]
     while dense_layers:
-        model.add(Dense(10,
+        model.add(Dense(dense_nodes,
                     dense_config['activation'],
                     kernel_initializer=he_uniform(seed=74),
                     bias_initializer=he_uniform(seed=52)))
@@ -294,7 +330,7 @@ def big_cnn_model(window_size, n_features, cnn_config, dense_config, optim_confi
                 dense_config['activation'],
                 kernel_initializer=he_uniform(seed=74),
                 bias_initializer=he_uniform(seed=52)))
-    model.compile(**optim_config)
+    model.compile(**optim_config, metrics=['accuracy'])
     return model
 
 
@@ -434,7 +470,7 @@ def create_big_model_subject(model_config, dataset):
                            X_train=dataset['X_train'].squeeze())
     elif (model_config['model'] == 'cnn'):
         return big_cnn_model(window_size=model_config['window_size'],
-                         n_features=10,
+                         n_features=12,
                          cnn_config=model_config['cnn'],
                          dense_config=model_config['dense'],
                          optim_config=optim_config,
@@ -446,7 +482,6 @@ def create_big_model_subject(model_config, dataset):
                          X_train=dataset['X_train'])
     else:
         raise Exception('No model generator for model type')
-
 
 def train_models_independent(model_type, hyperparameter_configs, data):
     results = []
@@ -505,10 +540,10 @@ def train_models_independent(model_type, hyperparameter_configs, data):
     df_results = pd.DataFrame(averaged_results)
     return (df_per_trial_results, df_results)
 
-
 def train_big_models_independent(model_type, hyperparameter_configs, data):
     results = []
-    for model_config in hyperparameter_configs:
+    for i, model_config in enumerate(hyperparameter_configs):
+        print('Config {}'.format(i))
         current_result = {}
         current_result['model_config'] = model_config
         current_result['left_validation_rmse'] = []
@@ -562,3 +597,18 @@ def train_big_models_independent(model_type, hyperparameter_configs, data):
     averaged_results = list(map(results_mapper_indep, results))
     df_results = pd.DataFrame(averaged_results)
     return (df_per_trial_results, df_results)
+
+def deploy_big_models_independent(model_type, hyperparameter_configs, data):
+    results = []
+    for i, model_config in enumerate(hyperparameter_configs):
+        dataset = deploy_cnn_extract_features_independent(data, model_config['window_size'])
+        model = create_big_model_subject(model_config.copy(), dataset)
+        model.summary()
+        early_stopping_callback = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=0)
+        model_history = model.fit(dataset['X_train'], dataset['y_train'], verbose=1, validation_split=0.2, shuffle=True, callbacks= [early_stopping_callback], **model_config['training'])
+        training_history = {}
+        # training_history['accuracy'] = model_history['acc']
+        # training_history['val_accuracy'] = model_history.history['val_acc']
+        training_history['loss'] = model_history.history['loss']
+        training_history['val_loss'] = model_history.history['val_loss']
+    return model, training_history

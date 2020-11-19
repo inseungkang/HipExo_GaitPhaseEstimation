@@ -1,0 +1,2 @@
+,window_size,model_type,cnn_kernel_size,cnn_layers,cnn_activation,cnn_output_size,dense_activation,dense_layers,optim_loss,optim_lr,optim_optimizer,training_epochs,training_batch_size,left_rmse_mean,right_rmse_mean
+0,120,cnn,20,2,relu,5,tanh,"(2, 30)",mean_absolute_error,0.01,adagrad,200,128,7.138356522968612,7.365829376925232
