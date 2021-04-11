@@ -10,7 +10,7 @@ def convert_to_polar(gp):
     theta = gp * 2 * np.pi
     x = np.cos(theta)
     y = np.sin(theta)
-    return x.reshape(-1, 1), y.reshape(-1, 1)
+    return x, y
 
 def convert_to_gp(x, y):
     gp = np.mod(np.arctan2(y, x)+2*np.pi, 2*np.pi) / (2*np.pi)
@@ -43,53 +43,56 @@ def calculate_pred(data):
     data = pd.concat([data, pred], axis=1)
     return data
 
-def cut_standing_phase(data):
+def cut_standing_phase(data, locomotionmode):
     l_data = r_data = data
     l_gp = convert_to_gp(data['leftGaitPhaseX'], data['leftGaitPhaseY'])
     lmaximas, _ = find_peaks(l_gp)
     lmaximas = list(lmaximas)
-    l_stand_phase = list(data[data['leftWalkMode']==0].index)
+    l_stand_phase = list(data[data['leftWalkMode']==locomotionmode].index)
     l_stand_phase = np.split(l_stand_phase, np.where(np.diff(l_stand_phase) != 1)[0]+1)
+    
     for phase in l_stand_phase:
         if len(phase) == 0:
             break
-        if phase[0] > lmaximas[0]:
-            bf = min(lmaximas, key=lambda x : abs(x-phase[0]))
-            if bf > phase[0]:
-                bf = lmaximas[lmaximas.index(bf) - 2]
-        else: 
-            bf = 0
-        if phase[-1] < lmaximas[-1]:
-            af = min(lmaximas, key=lambda x : abs(x-phase[-1]))
-            if af < phase[-1]:
-                af = lmaximas[lmaximas.index(af) + 2]
-        else:
-            af = data.shape[0]-1
-        l_data = l_data.drop(np.arange(bf, af+1), axis=0)
+        # if phase[0] > lmaximas[0]:
+        #     bf = min(lmaximas, key=lambda x : abs(x-phase[0]))
+        #     if bf > phase[0]:
+        #         bf = lmaximas[lmaximas.index(bf) - 2]
+        # else: 
+        #     bf = 0
+        # if phase[-1] < lmaximas[-1]:
+        #     af = min(lmaximas, key=lambda x : abs(x-phase[-1]))
+        #     if af < phase[-1]:
+        #         af = lmaximas[lmaximas.index(af) + 2]
+        # else:
+        #     af = data.shape[0]-1
+        # l_data = l_data.drop(np.arange(bf, af), axis=0)
+        l_data = l_data.drop(np.arange(phase[0], phase[-1]+1), axis=0)
     l_data = l_data.reset_index()
     
     r_gp = convert_to_gp(data['rightGaitPhaseX'], data['rightGaitPhaseY'])
     rmaximas, _ = find_peaks(r_gp)
     rmaximas = list(rmaximas)
     
-    r_stand_phase = list(data[data['rightWalkMode']==0].index)
+    r_stand_phase = list(data[data['rightWalkMode']==locomotionmode].index)
     r_stand_phase = np.split(r_stand_phase, np.where(np.diff(r_stand_phase) != 1)[0]+1)
     for phase in r_stand_phase:
         if len(phase) == 0:
             break
-        if phase[0] > rmaximas[0]:
-            bf = min(rmaximas, key=lambda x : abs(x-phase[0]))
-            if bf > phase[0]:
-                bf = rmaximas[rmaximas.index(bf) - 1]
-        else: 
-            bf = 0
-        if phase[-1] < rmaximas[-1]:
-            af = min(rmaximas, key=lambda x : abs(x-phase[-1]))
-            if af < phase[-1]:
-                af = rmaximas[rmaximas.index(af) + 1]
-        else:
-            af = data.shape[0]-1
-        r_data = r_data.drop(np.arange(bf, af+1), axis=0)
+        # if phase[0] > rmaximas[0]:
+        #     bf = min(rmaximas, key=lambda x : abs(x-phase[0]))
+        #     if bf > phase[0]:
+        #         bf = rmaximas[rmaximas.index(bf) - 1]
+        # else: 
+        #     bf = 0
+        # if phase[-1] < rmaximas[-1]:
+        #     af = min(rmaximas, key=lambda x : abs(x-phase[-1]))
+        #     if af < phase[-1]:
+        #         af = rmaximas[rmaximas.index(af) + 1]
+        # else:
+        #     af = data.shape[0]-1
+        # r_data = r_data.drop(np.arange(bf, af+1), axis=0)
+        r_data = r_data.drop(np.arange(phase[0], phase[-1]+1), axis=0)
     r_data = r_data.reset_index()
     
     return l_data, r_data
@@ -188,6 +191,66 @@ def get_mse(y_true, y_pred):
     
     return left_mse, right_mse
 
+def custom_rmse(y_true, y_pred):
+    #Raw values and Prediction are in X,Y
+    labels, theta, gp = {}, {}, {}
+
+    #Separate legs
+    left_true = y_true[:, :2]
+    right_true = y_true[:, 2:]
+    left_pred = y_pred[:, :2]
+    right_pred = y_pred[:, 2:]
+    
+    #Calculate cosine distance
+    left_num = np.sum(np.multiply(left_true, left_pred), axis=1)
+    left_denom = np.linalg.norm(left_true, axis=1) * np.linalg.norm(left_pred, axis=1)
+    right_num = np.sum(np.multiply(right_true, right_pred), axis=1)
+    right_denom = np.linalg.norm(right_true, axis=1) * np.linalg.norm(right_pred, axis=1)
+
+    left_cos = left_num / left_denom
+    right_cos = right_num / right_denom
+    
+    #Clip large values and small values
+    left_cos = np.minimum(left_cos, np.zeros(left_cos.shape)+1)
+    left_cos = np.maximum(left_cos, np.zeros(left_cos.shape)-1)
+    
+    right_cos = np.minimum(right_cos, np.zeros(right_cos.shape)+1)
+    right_cos = np.maximum(right_cos, np.zeros(right_cos.shape)-1)
+    
+    # What if denominator is zero (model predicts 0 for both X and Y)
+    left_cos[np.isnan(left_cos)] = 0
+    right_cos[np.isnan(right_cos)] = 0
+    
+    #Get theta error
+    left_theta = np.arccos(left_cos)
+    right_theta = np.arccos(right_cos)
+    
+    #Get gait phase error
+    left_gp_error = left_theta * 100 / (2*np.pi)
+    right_gp_error = right_theta * 100 / (2*np.pi)
+    
+    #Get rmse
+    left_rmse = np.sqrt(np.mean(np.square(left_gp_error)))
+    right_rmse = np.sqrt(np.mean(np.square(right_gp_error)))
+
+    #Separate legs
+    labels['left_true'] = left_true
+    labels['right_true'] = right_true
+    labels['left_pred'] = left_pred
+    labels['right_pred'] = right_pred
+
+    for key, value in labels.items(): 
+        #Convert to polar
+        theta[key] = np.arctan2(value[:, 1], value[:, 0])
+        
+        #Bring into range of 0 to 2pi
+        theta[key] = np.mod(theta[key] + 2*np.pi, 2*np.pi)
+
+        #Interpolate from 0 to 100%
+        gp[key] = 100*theta[key] / (2*np.pi)
+
+    return left_rmse, right_rmse
+
 def custom_rmse_uni(true, pred):
     #Raw values and Prediction are in X,Y
     labels, theta = {}, {}
@@ -225,49 +288,47 @@ def plot_gp(true_gp, pred_gp, title):
     
 ############################### Evaluation Script ############################
 
-headers = pd.read_csv('data/evalData/headers.txt')
-# filename = 'data/strokeData/ST06/ST06_LG_Final.txt'
-# # subject = 8
-# # method = 'ML'
-
 # # Load Data
-path = 'data/TerrainPark/ExoData'
-# # path = 'data/evalData/Mag/'
+headers = pd.read_csv('data/evalData/headers.txt')
 
-# filename = path + f'labeled_AB{subject}_{method}.txt'
-# data = pd.read_csv(filename)
-# manual_scrap_data(data, path+f'chopped_AB{subject}_{method}')
+subject = 'ST08'
+path = 'data/strokeData/' + subject + '/'
+mode = 'RA'
+filename = subject + '_' + mode + '_Final.txt'
 
-# # For Mannually Labeling Data
-# data = pd.read_csv(filename, skiprows=1, sep=" ")
-# data = data.dropna(axis=1)
-# data.columns = headers.columns.str.replace(' ', '')
-# data = data.loc[:,~data.columns.duplicated()]
+# Mannually labeling data
+data = pd.read_csv(path + filename, skiprows=1, sep=" ")
+data = data.dropna(axis=1)
+data.columns = headers.columns.str.replace(' ', '')
+data = data.loc[:,~data.columns.duplicated()]
+manual_label_data_eval(data, path+"labeled_"+filename)
 
-# manual_label_data_eval(data, 'data/strokeData/ST06/labeled_ST06_RA.txt')
+data = pd.read_csv(path+"labeled_"+filename)
+data = calculate_truth_and_pred(data)
+l_data, r_data = cut_standing_phase(data, 0)
+l_true_gp = convert_to_gp(l_data['l_x_true'], l_data['l_y_true'])
+r_true_gp = convert_to_gp(r_data['r_x_true'], r_data['r_y_true'])
+plot_gp(l_true_gp, l_data['leftGaitPhase'], 'Left ' + mode)
+plot_gp(r_true_gp, r_data['rightGaitPhase'], 'Right ' + mode)
 
-filename = 'data/strokeData/ST06/labeled_ST06_LG.txt'
-data = pd.read_csv(filename)
-l_data, r_data = cut_standing_phase(data)
-l_data = l_data.to_numpy()
-l_x_pred, l_y_pred = convert_to_polar(l_data[:, -6])
-l_pred = np.concatenate([l_x_pred, l_y_pred], axis=1)
-l_label = l_data[:, -4:-2]
-l_rmse = custom_rmse_uni(l_label, l_pred)
+# l_data, _ = cut_standing_phase(l_data, 1)
+# _, r_data = cut_standing_phase(r_data, 1)
 
-r_data = r_data.to_numpy()
-r_x_pred, r_y_pred = convert_to_polar(r_data[:, -5])
-r_pred = np.concatenate([r_x_pred, r_y_pred], axis=1)
-r_label = r_data[:, -2:]
-r_rmse = custom_rmse_uni(r_label, r_pred)
+# l_data, r_data = pd.concat([l_data, l_data_LG]), pd.concat([r_data, r_data_LG])
 
-r_pred_gp = r_data[:, -5].flatten()
-r_true_gp = convert_to_gp(r_data[:, -2], r_data[:, -1])
-plot_gp(r_true_gp, r_pred_gp, 'LG')
-exit()
+# l_x_pred, l_y_pred = convert_to_polar(l_data[:, -6])
+# l_pred = np.concatenate([l_x_pred, l_y_pred], axis=1)
+# l_label = l_data[:, -4:-2]
+# l_rmse = custom_rmse_uni(l_label, l_pred)
 
-rmse = np.mean([l_rmse, r_rmse])
-print("Left RMSE: ", l_rmse, " Right RMSE: " , r_rmse, " Mean: ", rmse)
+# r_data = r_data.to_numpy()
+# r_x_pred, r_y_pred = convert_to_polar(r_data[:, -5])
+# r_pred = np.concatenate([r_x_pred, r_y_pred], axis=1)
+# r_label = r_data[:, -2:]
+# r_rmse = custom_rmse_uni(r_label, r_pred)
+
+# rmse = np.mean([l_rmse, r_rmse])
+# print("Left RMSE: ", l_rmse, " Right RMSE: " , r_rmse, " Mean: ", rmse)
 
 # output = pd.DataFrame(columns=['model', 'locomotion_mode', 'step_rmse'])
 # # For Labeled Data
@@ -500,48 +561,53 @@ print("Left RMSE: ", l_rmse, " Right RMSE: " , r_rmse, " Mean: ", rmse)
 
 # plt.show()
 
-# # # Calculate the overall rmse
-# l_overall_rmse = custom_rmse(l_data.iloc[:, -9:-5].to_numpy(), 
-#                              l_data.iloc[:, -4:].to_numpy())
-# r_overall_rmse = custom_rmse(r_data.iloc[:, -9:-5].to_numpy(), 
-#                              r_data.iloc[:, -4:].to_numpy())
-# overall_rmse = (l_overall_rmse[0], r_overall_rmse[1])
-
+# Calculate the overall rmse
+l_overall_rmse = custom_rmse(l_data.iloc[:, -8:-4].to_numpy(), 
+                             l_data.iloc[:, -4:].to_numpy())
+r_overall_rmse = custom_rmse(r_data.iloc[:, -8:-4].to_numpy(), 
+                             r_data.iloc[:, -4:].to_numpy())
+overall_rmse = (l_overall_rmse[0], r_overall_rmse[1])
+print(overall_rmse)
+print((overall_rmse[0]+overall_rmse[1])/2)
+exit()
 # # Find indices for mode transition gait cycles and calculate transition rmse
-# # l_transition_cycles, r_transition_cycles = find_mode_transition_cycles(l_data, r_data)
-# # transitions = np.unique(list(l_transition_cycles.keys()))
-# # transition_rmse = {}
-# # for transition in transitions:   
-# #     l_transition_data = r_transition_data = pd.DataFrame([])
-# #     for indeces in l_transition_cycles[transition]:
-# #         l_transition_data = l_transition_data.append(l_data.iloc[indeces[0]:indeces[1]+1, :])
-# #     for indeces in r_transition_cycles[transition]:
-# #         r_transition_data = r_transition_data.append(r_data.iloc[indeces[0]:indeces[1]+1, :])   
-# #     l_rmse = custom_rmse(l_transition_data.iloc[:, -8:-4].to_numpy(), 
-# #                                     l_transition_data.iloc[:, -4:].to_numpy())
-# #     r_rmse = custom_rmse(r_transition_data.iloc[:, -8:-4].to_numpy(), 
-# #                                     r_transition_data.iloc[:, -4:].to_numpy())
-# #     transition_rmse[transition] = np.mean((l_rmse[0], r_rmse[1]))
-# # # Calculate mode specific rmse
-# # l_ntransition_data = l_data.drop(index=l_transition_data.index)
-# # l_modes = l_ntransition_data['leftWalkMode'].unique()
-# # l_mode_rmse = {}
-# # for mode in sorted(l_modes):
-# #     mode_data = l_ntransition_data[l_ntransition_data['leftWalkMode'] == mode]
-# #     l_mode_rmse[f'mode {mode}'] = custom_rmse(mode_data.iloc[:, -8:-4].to_numpy(), 
-# #                                   mode_data.iloc[:, -4:].to_numpy())
+# l_transition_cycles, r_transition_cycles = find_mode_transition_cycles(l_data, r_data)
+# transitions = np.unique(list(l_transition_cycles.keys()))
+# transition_rmse = {}
+# for transition in transitions:   
+#     l_transition_data = r_transition_data = pd.DataFrame([])
+#     for indeces in l_transition_cycles[transition]:
+#         l_transition_data = l_transition_data.append(l_data.iloc[indeces[0]:indeces[1]+1, :])
+#     for indeces in r_transition_cycles[transition]:
+#         r_transition_data = r_transition_data.append(r_data.iloc[indeces[0]:indeces[1]+1, :])   
+#     l_rmse = custom_rmse(l_transition_data.iloc[:, -8:-4].to_numpy(), 
+#                                     l_transition_data.iloc[:, -4:].to_numpy())
+#     r_rmse = custom_rmse(r_transition_data.iloc[:, -8:-4].to_numpy(), 
+#                                     r_transition_data.iloc[:, -4:].to_numpy())
+#     transition_rmse[transition] = np.mean((l_rmse[0], r_rmse[1]))
+# # Calculate mode specific rmse
+# l_ntransition_data = l_data.drop(index=l_transition_data.index)
+# l_modes = l_ntransition_data['leftWalkMode'].unique()
+l_modes = l_data['leftWalkMode'].unique()
+l_mode_rmse = {}
+for mode in sorted(l_modes):
+    # mode_data = l_ntransition_data[l_ntransition_data['leftWalkMode'] == mode]
+    mode_data = l_data[l_data['leftWalkMode'] == mode]
+    l_mode_rmse[f'mode {mode}'] = custom_rmse(mode_data.iloc[:, -8:-4].to_numpy(), 
+                                  mode_data.iloc[:, -4:].to_numpy())
 
-# # r_ntransition_data = r_data.drop(index=r_transition_data.index)
-# # r_modes = r_ntransition_data['rightWalkMode'].unique()
-# # r_mode_rmse = {}
-# # for mode in sorted(r_modes):
-# #     mode_data = r_ntransition_data[r_ntransition_data['rightWalkMode'] == mode]
-# #     r_mode_rmse[f'mode {mode}'] = custom_rmse(mode_data.iloc[:, -8:-4].to_numpy(), 
-# #                                   mode_data.iloc[:, -4:].to_numpy())
-# # mode_rmse = {}
-# # for mode in sorted(r_modes):
-# # mode_rmse[f'mode {mode}'] = np.mean((l_mode_rmse[f'mode {mode}'][0],
-# # r_mode_rmse[f'mode {mode}'][1]))
+# r_ntransition_data = r_data.drop(index=r_transition_data.index)
+# r_modes = r_ntransition_data['rightWalkMode'].unique()
+r_modes = r_data['rightWalkMode'].unique()
+r_mode_rmse = {}
+for mode in sorted(r_modes):
+    # mode_data = r_ntransition_data[r_ntransition_data['rightWalkMode'] == mode]
+    mode_data = r_data[r_data['rightWalkMode'] == mode]
+    r_mode_rmse[f'mode {mode}'] = custom_rmse(mode_data.iloc[:, -8:-4].to_numpy(), 
+                                  mode_data.iloc[:, -4:].to_numpy())
+mode_rmse = {}
+for mode in sorted(r_modes):
+        mode_rmse[f'mode {mode}'] = np.mean((l_mode_rmse[f'mode {mode}'][0], r_mode_rmse[f'mode {mode}'][1]))
 
 # segments = data['mag'].unique()
 # segments = segments[segments != -1]
@@ -560,26 +626,26 @@ print("Left RMSE: ", l_rmse, " Right RMSE: " , r_rmse, " Mean: ", rmse)
 # print('segment rmse: ', segment_rmse)
 # segment_rmse = pd.DataFrame(segment_rmse, index=[0])
 
-# # print('mode transition gait cycle rmse: ', '{:.2f}'.format(np.mean(list(transition_rmse.values()))))
-# # print('transition rmse breakdown: ', transition_rmse)
-# # print('mode rmse: ', mode_rmse)
+# print('mode transition gait cycle rmse: ', '{:.2f}'.format(np.mean(list(transition_rmse.values()))))
+# print('transition rmse breakdown: ', transition_rmse)
+print('mode rmse: ', mode_rmse)
 
 # pd.options.display.float_format = '{:.2f}'.format
-# # segment_rmse.to_excel('segment_rmse.xlsx')
-# # column_list = ['subject', 'method', 'overall', 'transition', 'sd-lg', 'sa-lg', 
-# #                'rd-lg', 'ra-lg', 'lg-ra', 'lg-rd', 'lg-sa', 'lg-sd', 'lg', 
-# #                'ra', 'rd', 'sa', 'sd']
+# segment_rmse.to_excel('segment_rmse.xlsx')
+# column_list = ['subject', 'method', 'overall', 'transition', 'sd-lg', 'sa-lg', 
+#                'rd-lg', 'ra-lg', 'lg-ra', 'lg-rd', 'lg-sa', 'lg-sd', 'lg', 
+#                'ra', 'rd', 'sa', 'sd']
 
-# # results = [subject, method, np.mean(overall_rmse), np.mean(list(transition_rmse.values()))] + list(transition_rmse.values()) + list(mode_rmse.values())
-# # results = pd.DataFrame(results).transpose()
-# # results.columns = column_list
-# # print(results)
-# # output = pd.read_excel('output.xlsx', index_col=0)
-# # output = output.loc[~((output['subject']==subject) & (output['method']==method))]
-# # output = output.append(results)
-# # output = output.sort_values(['subject', 'method'])
+# results = [subject, method, np.mean(overall_rmse), np.mean(list(transition_rmse.values()))] + list(transition_rmse.values()) + list(mode_rmse.values())
+# results = pd.DataFrame(results).transpose()
+# results.columns = column_list
+# print(results)
+# output = pd.read_excel('output.xlsx', index_col=0)
+# output = output.loc[~((output['subject']==subject) & (output['method']==method))]
+# output = output.append(results)
+# output = output.sort_values(['subject', 'method'])
 
-# # print('\n\nRESULTS:\n')
-# # print(output.to_string(index=False))
-# # print('\n\n')
-# # output.to_excel('output.xlsx')
+# print('\n\nRESULTS:\n')
+# print(output.to_string(index=False))
+# print('\n\n')
+# output.to_excel('output.xlsx')

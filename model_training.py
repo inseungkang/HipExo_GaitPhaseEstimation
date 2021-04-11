@@ -715,7 +715,7 @@ def get_dataset_independent(model_type, data_list, window_size, test_subject):
         raise Exception('No dataset for model type')
 
 
-def train_model_final(model_type, hyperparameter_configs, data):
+def train_model_final(model_type, hyperparameter_configs, data, filename='final_model_ZI.h5'):
     # results = []
     for model_config in hyperparameter_configs:
         # current_result = {}
@@ -730,7 +730,8 @@ def train_model_final(model_type, hyperparameter_configs, data):
         model.summary()
         early_stopping_callback = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=0)
         model_hist = model.fit(dataset['X_train'], dataset['y_train'], verbose=1, validation_split=0.2, shuffle=True, callbacks= [early_stopping_callback], **model_config['training'])
-        model.save('final_model')
+        # model.save(filename)
+        return model
 
 def train_model_indep_final(model_type, hyperparameter_configs, data):
     results = []
