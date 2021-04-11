@@ -2,3 +2,7 @@
 __pycache__
 .vscode
 env
+data/*
+*.h5
+*.csv
+*.xlsx

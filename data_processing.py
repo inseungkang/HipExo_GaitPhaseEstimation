@@ -102,7 +102,8 @@ def import_subject_data(subject_list, trial_list):
     data = {}
     for subject in subject_list:
         subject_data = {}
-        for condition in ['ZI', 'BT']:
+        # for condition in ['ZI', 'BT']:
+        for condition in ['ZI']:
             for direction in ['CW', 'CCW']:
                 trial_dict = {}
                 for trial in trial_list:
@@ -564,14 +565,22 @@ def nn_extract_features_subject(subject_data, window_size, test_trial, fold):
 def cnn_extract_features_subject(subject_data, window_size, test_trial, fold):
     testing_data = []
     training_data = []  
-    if fold == 'ZI':
+    if fold == 'ZIBT':
         for condition in ['ZICW','ZICCW']:
             for trial in subject_data[condition].keys():
                 training_data.extend(subject_data[condition][trial])
         for condition in ['BTCW', 'BTCCW']:
             testing_data.extend(subject_data[condition][test_trial])
-    elif fold == 'BT':
+    elif fold == 'BTBT':
         for condition in ['BTCW','BTCCW']:
+            print(subject_data.keys())
+            for trial in subject_data[condition].keys():
+                if trial == test_trial:
+                    testing_data.extend(subject_data[condition][trial])
+                else:
+                    training_data.extend(subject_data[condition][trial])
+    elif fold == 'ZIZI':
+        for condition in ['ZICW','ZICCW']:
             for trial in subject_data[condition].keys():
                 if trial == test_trial:
                     testing_data.extend(subject_data[condition][trial])
@@ -587,7 +596,6 @@ def cnn_extract_features_subject(subject_data, window_size, test_trial, fold):
                         training_data.extend(subject_data[condition][trial])
                 else:
                     training_data.extend(subject_data[condition][trial])
-    print(len(training_data))
     X_test = np.zeros((1, window_size, 10))
     Y_test = np.zeros((1, 4))
     X_train = np.zeros((1, window_size, 10))

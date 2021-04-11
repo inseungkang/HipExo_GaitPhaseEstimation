@@ -921,7 +921,6 @@ def manual_scrap_data_eval(data, filename):
     """
     def onclick(event):
         print(event.xdata)
-        plt.close()
 
     def plot_trial(lWalkmode, rWalkmode, lJPos, rJPos, start=False, end=False):
         f, axs = plt.subplots(2,1, sharex=True, figsize=(10, 4))
@@ -1002,7 +1001,7 @@ def manual_scrap_data_eval(data, filename):
         for i, (start, end) in enumerate(current_file_subsets, start=1):
             clip = data.loc[start:end]
             # Save all data for this trial
-            clip.to_csv(filename)
+            clip.to_csv(filename+f'_{i}.txt')
 
 def manual_segment_magnitudes(data, filename):
     def onclick(event):
