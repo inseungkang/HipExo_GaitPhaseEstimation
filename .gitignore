@@ -1,3 +1,8 @@
 .DS_Store
 __pycache__
 .vscode
+env
+data/*
+*.h5
+*.csv
+*.xlsx
