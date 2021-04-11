@@ -103,7 +103,7 @@ def import_subject_data(subject_list, trial_list):
     for subject in subject_list:
         subject_data = {}
         # for condition in ['ZI', 'BT']:
-        for condition in ['ZI']:
+        for condition in ['BT']:
             for direction in ['CW', 'CCW']:
                 trial_dict = {}
                 for trial in trial_list:
@@ -668,7 +668,7 @@ def cnn_extract_features_subject(subject_data, window_size, test_trial, fold):
     data_out['y_train'] = Y_train
     return data_out
 
-def cnn_extract_features_independent(data_list, window_size, test_subject):
+def cnn_extract_features_independent(data_list, window_size, test_subject, type):
     testing_data = []
     training_data = []
     for subject in data_list.keys():
@@ -717,13 +717,6 @@ def cnn_extract_features_independent(data_list, window_size, test_subject):
     
     X_test = X_test[1:, :, :]
     Y_test = Y_test[1:, :]
-
-    data_out['X_test'] = X_test
-    data_out['y_test'] = Y_test
-
-    if len(mode) > 1:
-        mode = mode[1:]
-        data_out['mode'] = mode
     
     # Generate Training Data
     for i, data in enumerate(training_data):
@@ -749,6 +742,21 @@ def cnn_extract_features_independent(data_list, window_size, test_subject):
 
     X_train = X_train[1:, :, :]
     Y_train = Y_train[1:, :]
+
+    data_out['X_test'] = X_test
     data_out['X_train'] = X_train
-    data_out['y_train'] = Y_train
+    
+    if type == 'bi':
+        data_out['y_test'] = Y_test
+        data_out['y_train'] = Y_train
+    elif type == 'uni':
+        data_out['y_test_l'] = Y_test[:, :2]
+        data_out['y_test_r'] = Y_test[:, 2:]
+        data_out['y_train_l'] = Y_train[:, :2]
+        data_out['y_train_r'] = Y_train[:, 2:]
+
+    if len(mode) > 1:
+        mode = mode[1:]
+        data_out['mode'] = mode
+
     return data_out

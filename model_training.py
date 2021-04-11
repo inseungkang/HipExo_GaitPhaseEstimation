@@ -234,7 +234,7 @@ def lstm_model(sequence_length, n_features, lstm_config, dense_config, optim_con
     return model
 
 # Creates a CNN model based on the specified configuration
-def cnn_model(window_size, n_features, cnn_config, dense_config, optim_config, X_train):
+def cnn_model(window_size, n_features, cnn_config, dense_config, optim_config, X_train, type):
     conv_kernel = cnn_config['kernel_size']
     model = Sequential()
     # norm_layer = Normalization(input_shape=(window_size, n_features))
@@ -256,12 +256,18 @@ def cnn_model(window_size, n_features, cnn_config, dense_config, optim_config, X
                 # bias_initializer=HeUniform(seed=91)))
     model.add(Activation(cnn_config['activation']))
     model.add(Flatten())
-    model.add(Dense(4,
-                dense_config['activation'],
-                kernel_initializer=he_uniform(seed=74),
-                bias_initializer=he_uniform(seed=52)))
-                # kernel_initializer=HeUniform(seed=74),
-                # bias_initializer=HeUniform(seed=52)))
+    if type == 'bi':
+        model.add(Dense(4,
+                    dense_config['activation'],
+                    kernel_initializer=he_uniform(seed=74),
+                    bias_initializer=he_uniform(seed=52)))
+                    # kernel_initializer=HeUniform(seed=74),
+                    # bias_initializer=HeUniform(seed=52)))
+    elif type == 'uni':
+        model.add(Dense(2,
+                    dense_config['activation'],
+                    kernel_initializer=he_uniform(seed=74),
+                    bias_initializer=he_uniform(seed=52)))
     model.compile(**optim_config)
     return model
 
@@ -340,6 +346,36 @@ def custom_rmse(y_true, y_pred):
 
     return left_rmse, right_rmse
 
+
+def custom_rmse_uni(true, pred):
+    #Raw values and Prediction are in X,Y
+    labels, theta = {}, {}
+    
+    #Calculate cosine distance
+    num = np.sum(np.multiply(true, pred), axis=1)
+    denom = np.linalg.norm(true, axis=1) * np.linalg.norm(pred, axis=1)
+
+    cos = num / denom
+    
+    #Clip large values and small values
+    cos = np.minimum(cos, np.zeros(cos.shape)+1)
+    cos = np.maximum(cos, np.zeros(cos.shape)-1)
+    
+    # What if denominator is zero (model predicts 0 for both X and Y)
+    cos[np.isnan(cos)] = 0
+    
+    #Get theta error
+    theta = np.arccos(cos)
+    
+    #Get gait phase error
+    gp_error = theta * 100 / (2*np.pi)
+    
+    #Get rmse
+    rmse = np.sqrt(np.mean(np.square(gp_error)))
+
+    return rmse
+
+
 # Maps hyperparameter search results into a good
 #  format to present in a DataFrame
 def results_mapper(x):
@@ -385,6 +421,7 @@ def results_mapper_indep(x):
     
     out['left_rmse_mean'] = x['left_rmse_mean']
     out['right_rmse_mean'] = x['right_rmse_mean']
+    out['rmse_mean'] = x['rmse_mean']
     return out
 
 
@@ -587,7 +624,7 @@ def get_model_configs_independent(hyperparam_space):
 
 
 # Creates the appropriate model based on the configuration
-def create_model_subject(model_config, dataset):
+def create_model_subject(model_config, dataset, type='bi'):
     if 'lr' in model_config['optimizer']:
         lr = model_config['optimizer']['lr']
         optim_config = {k:v for (k, v) in model_config['optimizer'].items() if k != 'lr'}
@@ -614,7 +651,8 @@ def create_model_subject(model_config, dataset):
                          cnn_config=model_config['cnn'],
                          dense_config=model_config['dense'],
                          optim_config=optim_config,
-                         X_train=dataset['X_train'])
+                         X_train=dataset['X_train'],
+                         type=type)
     elif (model_config['model'] == 'mlp'):
         return mlp_model(n_features=50,
                          dense_config=model_config['dense'],
@@ -699,9 +737,9 @@ def get_dataset_subject(model_type, data_list, window_size, test_trial, fold):
     else:
         raise Exception('No dataset for model type')
 
-def get_dataset_independent(model_type, data_list, window_size, test_subject):
+def get_dataset_independent(model_type, data_list, window_size, test_subject, type='bi'):
     if model_type == 'cnn':
-        return cnn_extract_features_independent(data_list, window_size, test_subject)
+        return cnn_extract_features_independent(data_list, window_size, test_subject, type)
     # elif model_type == 'lstm':
     #     dataset = cnn_extract_features_subject(data_list, window_size, test_trial, fold)
     #     dataset['X_train'] = dataset['X_train'].squeeze()
@@ -801,6 +839,95 @@ def train_models_independent(model_type, hyperparameter_configs, data):
         model['left_rmse_mean'] = np.mean(model['left_validation_rmse'])
         model['right_rmse_mean'] = np.mean(model['right_validation_rmse'])
                 
+    averaged_results = list(map(results_mapper_indep, results))
+    df_results = pd.DataFrame(averaged_results)
+    return (df_per_trial_results, df_results)
+
+
+def train_models_independent_unilateral(model_type, hyperparameter_configs, data):
+    results = []
+    for model_config in hyperparameter_configs:
+        current_result = {}
+        current_result['model_config'] = model_config
+        current_result['left_validation_rmse'] = []
+        current_result['right_validation_rmse'] = []
+        current_result['mean_validation_rmse'] = []
+        subjects = data.keys()
+        for test_subject in subjects:
+            dataset = get_dataset_independent(model_type, data, 
+                                              model_config['window_size'], 
+                                              test_subject, type='uni')
+
+            early_stopping_callback = EarlyStopping(monitor='val_loss', 
+                                                    min_delta=0, patience=10, 
+                                                    verbose=0)
+            
+            #Left model
+            model = create_model_subject(model_config.copy(), 
+                                              dataset, type='uni')
+            
+            model_hist = model.fit(dataset['X_train'], 
+                                        dataset['y_train_l'], verbose=1, 
+                                        validation_split=0.2, shuffle=True, 
+                                        callbacks= [early_stopping_callback], 
+                                        **model_config['training'])
+
+            predictions = model.predict(dataset['X_test'])
+            left_rmse = custom_rmse_uni(dataset['y_test_l'], predictions)
+            current_result['left_validation_rmse'].append(left_rmse)
+
+            #Right model
+            model = create_model_subject(model_config.copy(), 
+                                              dataset, type='uni')
+            
+            model_hist = model.fit(dataset['X_train'], 
+                                        dataset['y_train_r'], verbose=1, 
+                                        validation_split=0.2, shuffle=True, 
+                                        callbacks= [early_stopping_callback], 
+                                        **model_config['training'])
+
+            predictions = model.predict(dataset['X_test'])
+            right_rmse = custom_rmse_uni(dataset['y_test_r'], predictions)
+            current_result['right_validation_rmse'].append(right_rmse)
+            current_result['mean_validation_rmse'].append(
+                np.mean((left_rmse, right_rmse)))
+            
+            clear_session()
+        
+        results.append(current_result)
+    
+    per_trial_results = []
+    for trial in results:
+        left_val_rmse = trial['left_validation_rmse']
+        right_val_rmse = trial['right_validation_rmse']
+        mean_val_rmse = trial['mean_validation_rmse']
+        for i, test_subject in enumerate(data.keys()):
+            trial_result = {}
+            trial_result['test_subject'] = test_subject
+            trial_result['window_size'] = trial['model_config']['window_size']
+
+            if (model_type != 'mlp'):
+                for key in trial['model_config'][model_type].keys():
+                    trial_result['{}_{}'.format(model_type, key)] = trial['model_config'][model_type][key]
+
+            for key in trial['model_config']['dense'].keys():
+                trial_result['dense_{}'.format(key)] = trial['model_config']['dense'][key]
+
+            for key in trial['model_config']['optimizer'].keys():
+                trial_result['optim_{}'.format(key)] = trial['model_config']['optimizer'][key]
+
+            for key in trial['model_config']['training'].keys():
+                trial_result['training_{}'.format(key)] = trial['model_config']['training'][key]
+            trial_result['left_validation_rmse'] = left_val_rmse[i-1]
+            trial_result['right_validation_rmse'] = right_val_rmse[i-1]
+            trial_result['mean_validation_rmse'] = mean_val_rmse[i-1]
+            per_trial_results.append(trial_result)
+    df_per_trial_results = pd.DataFrame(per_trial_results)
+
+    for model in results:
+        model['left_rmse_mean'] = np.mean(model['left_validation_rmse'])
+        model['right_rmse_mean'] = np.mean(model['right_validation_rmse'])
+        model['rmse_mean'] = np.mean(model['mean_validation_rmse'])        
     averaged_results = list(map(results_mapper_indep, results))
     df_results = pd.DataFrame(averaged_results)
     return (df_per_trial_results, df_results)
