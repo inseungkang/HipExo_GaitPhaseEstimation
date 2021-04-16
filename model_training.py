@@ -847,6 +847,7 @@ def train_models_independent(model_type, hyperparameter_configs, data):
 def train_models_independent_unilateral(model_type, hyperparameter_configs, data):
     results = []
     for model_config in hyperparameter_configs:
+       
         current_result = {}
         current_result['model_config'] = model_config
         current_result['left_validation_rmse'] = []
@@ -863,35 +864,35 @@ def train_models_independent_unilateral(model_type, hyperparameter_configs, data
                                                     verbose=0)
             
             #Left model
-            model = create_model_subject(model_config.copy(), 
+            left_model = create_model_subject(model_config.copy(), 
                                               dataset, type='uni')
             
-            model_hist = model.fit(dataset['X_train'], 
+            model_hist = left_model.fit(dataset['X_train'], 
                                         dataset['y_train_l'], verbose=1, 
                                         validation_split=0.2, shuffle=True, 
                                         callbacks= [early_stopping_callback], 
                                         **model_config['training'])
 
-            predictions = model.predict(dataset['X_test'])
+            predictions = left_model.predict(dataset['X_test'])
             left_rmse = custom_rmse_uni(dataset['y_test_l'], predictions)
             current_result['left_validation_rmse'].append(left_rmse)
 
             #Right model
-            model = create_model_subject(model_config.copy(), 
+            right_model = create_model_subject(model_config.copy(), 
                                               dataset, type='uni')
             
-            model_hist = model.fit(dataset['X_train'], 
+            model_hist = right_model.fit(dataset['X_train'], 
                                         dataset['y_train_r'], verbose=1, 
                                         validation_split=0.2, shuffle=True, 
                                         callbacks= [early_stopping_callback], 
                                         **model_config['training'])
 
-            predictions = model.predict(dataset['X_test'])
+            predictions = right_model.predict(dataset['X_test'])
             right_rmse = custom_rmse_uni(dataset['y_test_r'], predictions)
             current_result['right_validation_rmse'].append(right_rmse)
             current_result['mean_validation_rmse'].append(
                 np.mean((left_rmse, right_rmse)))
-            
+            print(left_rmse, right_rmse)
             clear_session()
         
         results.append(current_result)
