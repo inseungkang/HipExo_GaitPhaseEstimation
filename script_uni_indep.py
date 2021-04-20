@@ -61,7 +61,7 @@ hyperparam_space = {
         'optimizer': ['adam']
     },
     'training': {
-        'epochs': [2],
+        'epochs': [50],
         'batch_size': [128]
     }
 }
@@ -71,8 +71,10 @@ hyperparameter_configs = get_model_configs_subject(hyperparam_space)
 
 data = import_subject_data(subjects, trials)
 
-trial_results, average_results = train_models_independent_unilateral(
-    hyperparam_space['model'], hyperparameter_configs, data)
+# trial_results, average_results = train_models_independent_unilateral(
+#     hyperparam_space['model'], hyperparameter_configs, data)
 
-trial_results.to_csv('trial_results.csv')
-average_results.to_csv('average_results.csv')
+# trial_results.to_csv('trial_results.csv')
+# average_results.to_csv('average_results.csv')
+
+train_uni_indep_final(hyperparam_space['model'], hyperparameter_configs, data)

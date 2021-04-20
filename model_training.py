@@ -240,7 +240,7 @@ def cnn_model(window_size, n_features, cnn_config, dense_config, optim_config, X
     # norm_layer = Normalization(input_shape=(window_size, n_features))
     # norm_layer.adapt(X_train)
     # model.add(norm_layer)
-    model.add(BatchNormalization(input_shape=(window_size, n_features)))
+
     model.add(Conv1D(10,
                 conv_kernel,
                 input_shape=(window_size, n_features),
@@ -248,29 +248,41 @@ def cnn_model(window_size, n_features, cnn_config, dense_config, optim_config, X
                 bias_initializer=he_uniform(seed=11)))
                 # kernel_initializer=HeUniform(seed=1),
                 # bias_initializer=HeUniform(seed=11)))
+    output_kernel = window_size - conv_kernel + 1
+    model.add(BatchNormalization(input_shape=((int)(output_kernel), n_features)))
+    model.add(Dropout(0.2))
+    model.add(Activation(cnn_config['activation']))
+
     model.add(Conv1D(10,
-                (int)(window_size - conv_kernel + 1),
+                conv_kernel,
+                input_shape=(output_kernel, n_features),
                 kernel_initializer=he_uniform(seed=25),
                 bias_initializer=he_uniform(seed=91)))
                 # kernel_initializer=HeUniform(seed=25),
                 # bias_initializer=HeUniform(seed=91)))
+    output_kernel = output_kernel - conv_kernel + 1
+    model.add(BatchNormalization(input_shape=((int)(output_kernel), n_features)))
+    model.add(Dropout(0.2))
     model.add(Activation(cnn_config['activation']))
     model.add(Flatten())
+
     if type == 'bi':
-        model.add(Dense(4,
-                    dense_config['activation'],
+        model.add(Dense(4, dense_config['activation'],
                     kernel_initializer=he_uniform(seed=74),
                     bias_initializer=he_uniform(seed=52)))
                     # kernel_initializer=HeUniform(seed=74),
                     # bias_initializer=HeUniform(seed=52)))
     elif type == 'uni':
-        model.add(Dense(2,
-                    dense_config['activation'],
+        model.add(Dense((int)(output_kernel/2),
+                    kernel_initializer=he_uniform(seed=74),
+                    bias_initializer=he_uniform(seed=52)))
+
+        model.add(Dense(2, dense_config['activation'],
                     kernel_initializer=he_uniform(seed=74),
                     bias_initializer=he_uniform(seed=52)))
     model.compile(**optim_config)
     return model
-
+    
 # Creates an MLP model based on the specified configuration
 def mlp_model(n_features, dense_config, optim_config, X_train):
     model = Sequential()
