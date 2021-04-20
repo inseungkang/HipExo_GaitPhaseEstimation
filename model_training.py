@@ -5,7 +5,7 @@ from tensorflow.keras import Input
 from tensorflow.keras.optimizers import Adam, SGD, RMSprop, Adagrad
 from tensorflow.keras.backend import clear_session
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Conv1D, Activation, Flatten, LSTM, BatchNormalization
+from tensorflow.keras.layers import Dense, Conv1D, Activation, Flatten, LSTM, BatchNormalization, Dropout
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
 # from tensorflow.keras.initializers import HeUniform
 # from tensorflow.keras.layers.experimental.preprocessing import Normalization
@@ -282,7 +282,7 @@ def cnn_model(window_size, n_features, cnn_config, dense_config, optim_config, X
                     bias_initializer=he_uniform(seed=52)))
     model.compile(**optim_config)
     return model
-    
+
 # Creates an MLP model based on the specified configuration
 def mlp_model(n_features, dense_config, optim_config, X_train):
     model = Sequential()
